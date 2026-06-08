@@ -1,0 +1,88 @@
+{
+  "name": "@instantkom/mcp-server",
+  "version": "3.144.0",
+  "description": "Model Context Protocol Server for the instantKOM REST API. Lets Claude Code, Claude Desktop and other MCP-compatible AI assistants drive your instantKOM messengerzentrale.",
+  "main": "dist/index.public.js",
+  "types": "dist/index.public.d.ts",
+  "type": "module",
+  "bin": {
+    "instantkom-mcp": "./dist/index.public.js"
+  },
+  "files": [
+    "dist/index.public.js",
+    "dist/index.public.js.map",
+    "dist/index.public.d.ts",
+    "dist/index.public.d.ts.map",
+    "dist/client/**",
+    "dist/types/**",
+    "dist/tools/public/**",
+    "dist/tools/app/**",
+    "dist/tools/tool-router.js",
+    "dist/tools/tool-router.js.map",
+    "dist/tools/tool-router.d.ts",
+    "dist/tools/tool-router.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc && cp src/config/tenants.json dist/config/tenants.json && chmod +x dist/index.js && chmod +x dist/index.public.js",
+    "build:public": "tsc && chmod +x dist/index.public.js",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --project unit",
+    "test:contract": "vitest run --project contract",
+    "test:coverage": "vitest run --coverage",
+    "check:public-package": "node scripts/check-public-package.cjs",
+    "prepublishOnly": "npm run build:public && npm run check:public-package"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "instantkom",
+    "messenger",
+    "whatsapp",
+    "telegram",
+    "signal",
+    "claude",
+    "anthropic",
+    "ai",
+    "api"
+  ],
+  "author": "instantKOM",
+  "license": "MIT",
+  "homepage": "https://github.com/instantKOM/mcp-server#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/instantKOM/mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/instantKOM/mcp-server/issues"
+  },
+  "dependencies": {
+    "@instantkom/api-client": "file:../../packages/api-client",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@sentry/node": "^10.55.0",
+    "dotenv": "^17.4.2",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@vitest/coverage-v8": "^4.1.5",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "path-to-regexp": "^8.4.0",
+    "hono": "^4.12.16",
+    "ip-address": "^10.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

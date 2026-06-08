@@ -1,0 +1,26 @@
+# Source TypeScript files (only dist/ gets published)
+src/
+
+# Internal tools (not part of the public package)
+# Note: dist/tools/admin/ and dist/tools/internal/ are bundled
+# but only activated via the internal index.js entry point.
+
+# Test files
+src/tests/
+*.test.ts
+*.spec.ts
+vitest.config.*
+coverage/
+
+# Dev config
+.env
+.env.*
+tsconfig.json
+scripts/
+
+# Internal config (contains sensitive tenant configurations)
+src/config/tenants.json
+
+# Git and CI
+.github/
+.gitignore
