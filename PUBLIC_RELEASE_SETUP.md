@@ -47,23 +47,30 @@ gh api -X PUT /repos/instantKOM/mcp-server/topics \
 
 ### Step 2 -- Create the sync token
 
-The sync workflow needs to push to `instantKOM/mcp-server` from the monorepo runner.
+The sync workflow needs to push to `instantKOM/mcp-server` from the monorepo
+runner. The same token is shared by all three public-repo sync workflows
+(api-examples, cli-examples, mcp-server), stored once as `PUBLIC_SYNC_TOKEN`.
 
 1. Go to https://github.com/settings/personal-access-tokens/new
 2. Select **Fine-grained personal access token**
 3. Resource owner: `instantKOM`
-4. Repository access: only `instantKOM/mcp-server`
-5. Repository permissions:
-   - Contents: **Read and write**
-   - Metadata: **Read-only** (auto-selected)
-6. Expiration: 1 year (renew calendar reminder)
+4. Repository access: ONLY the three public mirror repos --
+   `instantKOM/api-examples`, `instantKOM/cli-examples`, `instantKOM/mcp-server`
+5. Repository permissions: **Contents: Read and write** (Metadata: Read-only,
+   auto-selected)
+6. Expiration: per policy (set a renewal reminder)
 7. Generate
 
-Add the token as a secret on the **monorepo** (`virtualart-online/instantKOM`):
+   Least-privilege: this token can only touch the three mirror repos. A classic
+   `public_repo` token also works but is broader (write to every public repo the
+   account can reach) and is discouraged for this CI secret.
+
+Add the token as the shared secret on the **monorepo**
+(`virtualart-online/instantKOM`):
 ```
-gh secret set PUBLIC_REPO_SYNC_TOKEN \
+gh secret set PUBLIC_SYNC_TOKEN \
   --repo virtualart-online/instantKOM \
-  --body "ghp_..."
+  --body "github_pat_..."
 ```
 
 ### Step 3 -- Configure npm Trusted Publisher (OIDC)
