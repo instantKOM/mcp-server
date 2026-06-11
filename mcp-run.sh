@@ -49,7 +49,7 @@ case "$TENANT_ID" in
       export API_KEY
     fi
     # For admin endpoints: resolve JWT credentials.
-    # Local dev uses the seeded account (instantkom@instantkom.app / !Test123)
+    # Local dev uses the seeded account (instantkom@instantkom.app / $(vault-get instantkom-test-accounts password))
     # from dev/db/schema/data/32-instantkom-cmcom-account.sql - not a secret.
     # Override via env IKM_ADMIN_USERNAME/PASSWORD or vault entry "local-mcp-admin".
     if [ -z "${IKM_ADMIN_USERNAME:-}" ]; then
@@ -59,7 +59,7 @@ case "$TENANT_ID" in
       fi
       # Default to seeded local account if still unset
       export IKM_ADMIN_USERNAME="${IKM_ADMIN_USERNAME:-instantkom@instantkom.app}"
-      export IKM_ADMIN_PASSWORD="${IKM_ADMIN_PASSWORD:-!Test123}"
+      export IKM_ADMIN_PASSWORD="${IKM_ADMIN_PASSWORD:-$(vault-get instantkom-test-accounts password)}"
       echo "[mcp-run] JWT auth configured (user: $IKM_ADMIN_USERNAME)" >&2
     fi
     ;;
@@ -183,7 +183,7 @@ resolve_other_tenant_creds() {
     printf 'instantkom@instantkom.app' > "$TMPDIR/int_user"
   fi
   if [ ! -s "$TMPDIR/int_pass" ]; then
-    printf '!Test123' > "$TMPDIR/int_pass"
+    printf '$(vault-get instantkom-test-accounts password)' > "$TMPDIR/int_pass"
   fi
 
   # Write all resolved credentials to env file

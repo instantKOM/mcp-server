@@ -7,7 +7,7 @@
 # Usage:
 #   # Login with username/password (prompts for password if not set)
 #   ./scripts/get-jwt.sh --login admin
-#   ./scripts/get-jwt.sh --login instantkom-puppeteer
+#   ./scripts/get-jwt.sh --login omnichannel-tester
 #
 #   # Login with explicit password
 #   JWT_PASSWORD=secret ./scripts/get-jwt.sh --login admin
