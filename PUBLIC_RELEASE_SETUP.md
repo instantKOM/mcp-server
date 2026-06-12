@@ -7,7 +7,7 @@ After the one-time setup, every push to `main` that touches
 `services/mcp-server/**` will automatically:
 
 1. Sync the sanitized folder to `github.com/instantKOM/mcp-server` (workflow: `sync-public-mcp-server.yml`)
-2. Publish to npm if the version bumped (workflow: `publish-mcp-server.yml`)
+2. Publish to npm if the version bumped (workflow: `release-publish-mcp.yml`)
 
 ---
 
@@ -93,7 +93,7 @@ Configure the trusted publisher:
 2. **Settings** -> **Publish Access** -> **Add GitHub Actions publisher**
 3. Owner: `virtualart-online`
 4. Repository: `instantKOM`
-5. Workflow filename: `publish-mcp-server.yml`
+5. Workflow filename: `release-publish-mcp.yml`
 6. Environment: leave empty
 7. Save
 
@@ -103,13 +103,13 @@ Once Step 1-3 are done, push any change under `services/mcp-server/` to `main`. 
 
 ```
 gh workflow run sync-public-mcp-server.yml --ref main
-gh workflow run publish-mcp-server.yml --ref main
+gh workflow run release-publish-mcp.yml --ref main
 ```
 
 Monitor:
 ```
 gh run list --workflow=sync-public-mcp-server.yml --limit 3
-gh run list --workflow=publish-mcp-server.yml --limit 3
+gh run list --workflow=release-publish-mcp.yml --limit 3
 ```
 
 Verify:
