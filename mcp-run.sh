@@ -50,7 +50,7 @@ case "$TENANT_ID" in
     fi
     # For admin endpoints: resolve JWT credentials.
     # Local dev uses the seeded account (instantkom@instantkom.app / $(vault-get instantkom-test-accounts password))
-    # from dev/db/schema/data/32-instantkom-cmcom-account.sql - not a secret.
+    # from the CmcomAccountSeeder (services/backend/seeds/, issue #4242) - not a secret.
     # Override via env IKM_ADMIN_USERNAME/PASSWORD or vault entry "local-mcp-admin".
     if [ -z "${IKM_ADMIN_USERNAME:-}" ]; then
       if command -v vault-get &>/dev/null; then

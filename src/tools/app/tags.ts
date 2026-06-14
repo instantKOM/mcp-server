@@ -187,6 +187,24 @@ export async function removeContactTag(apiClient: ApiClient, args: { contactId: 
   };
 }
 
+export async function getTagSegments(apiClient: ApiClient, args: { id: number; page?: number; limit?: number }): Promise<any> {
+  const params = new URLSearchParams();
+  if (args.page) params.append('page', args.page.toString());
+  if (args.limit) params.append('limit', args.limit.toString());
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const response = await apiClient.get(`/v1/tags/${args.id}/segments${query}`);
+  return { content: [{ type: 'text', text: JSON.stringify(response, null, 2) }] };
+}
+
+export async function getTagBots(apiClient: ApiClient, args: { id: number; page?: number; limit?: number }): Promise<any> {
+  const params = new URLSearchParams();
+  if (args.page) params.append('page', args.page.toString());
+  if (args.limit) params.append('limit', args.limit.toString());
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const response = await apiClient.get(`/v1/tags/${args.id}/bots${query}`);
+  return { content: [{ type: 'text', text: JSON.stringify(response, null, 2) }] };
+}
+
 export const tagTools = [
   {
     name: 'list_tags',
@@ -363,6 +381,32 @@ export const tagTools = [
         tagId: { type: 'number', description: 'Tag ID to remove' },
       },
       required: ['contactId', 'tagId'],
+    },
+  },
+  {
+    name: 'get_tag_segments',
+    description: 'List all segments that use a specific tag, paginated',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Tag ID' },
+        page: { type: 'number', description: 'Page number (default: 1)' },
+        limit: { type: 'number', description: 'Items per page (default: 20)' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'get_tag_bots',
+    description: 'List all bots that use a specific tag, paginated',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Tag ID' },
+        page: { type: 'number', description: 'Page number (default: 1)' },
+        limit: { type: 'number', description: 'Items per page (default: 20)' },
+      },
+      required: ['id'],
     },
   },
   {
