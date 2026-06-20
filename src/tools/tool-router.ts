@@ -31,6 +31,12 @@ type ToolHandler = (apiClient: ApiClient, args: any) => Promise<any>;
 const toolRegistry = new Map<string, ToolHandler>();
 
 /**
+ * Tools whose definition exists but no matching handler function was found.
+ * Populated during registration; surfaced by the check:tool-handlers gate.
+ */
+const unregisteredTools: Array<{ name: string; scope: string; tried: string[] }> = [];
+
+/**
  * Convert snake_case tool name to camelCase handler function name.
  * Example: 'list_channels' -> 'listChannels'
  *          'admin_get_plan' -> 'adminGetPlan'
@@ -101,6 +107,7 @@ function autoRegister(
     }
 
     if (!found) {
+      unregisteredTools.push({ name: tool.name, scope, tried: candidates });
       console.error(
         `[tool-router] WARNING: No handler found for tool '${tool.name}' (tried: ${candidates.join(', ')}) in ${scope} handlers`,
       );
@@ -146,4 +153,13 @@ export function hasToolHandler(name: string): boolean {
  */
 export function getRegisteredToolCount(): number {
   return toolRegistry.size;
+}
+
+/**
+ * List tools that have a definition but no registered handler.
+ * Used by the check:tool-handlers CI/pre-commit gate to fail on silent
+ * wiring gaps (tool listed + advertised, but every call throws "Unknown tool").
+ */
+export function getUnregisteredTools(): Array<{ name: string; scope: string; tried: string[] }> {
+  return unregisteredTools;
 }

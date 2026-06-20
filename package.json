@@ -37,6 +37,7 @@
     "test:unit": "vitest run --project unit",
     "test:contract": "vitest run --project contract",
     "test:coverage": "vitest run --coverage",
+    "check:tool-handlers": "tsx scripts/check-tool-handlers.ts",
     "check:public-package": "node scripts/check-public-package.cjs",
     "prepublishOnly": "npm run build:public && npm run check:public-package"
   },
