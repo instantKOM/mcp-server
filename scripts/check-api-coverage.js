@@ -50,6 +50,7 @@ const IGNORED_PREFIXES = [
   'internal/webhooks',  // PHP->NestJS webhook trigger bridge (not user-facing)
   'internal/push',      // Internal push notifications
   'internal/ai',        // Internal AI costs/insights
+  'internal/business-health', // Ops Hub business-health signals (IP+token gated, not user-facing)
   'internal/stripe',    // PHP->NestJS stripe charge bridge (not user-facing)
   'v1/internal/stripe', // Versioned PHP->NestJS stripe charge bridge (not user-facing)
   'internal/instantchat', // PHP->NestJS instantCHAT outbound delivery bridge (not user-facing)
