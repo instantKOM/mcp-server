@@ -54,6 +54,8 @@ const IGNORED_PREFIXES = [
   'internal/stripe',    // PHP->NestJS stripe charge bridge (not user-facing)
   'v1/internal/stripe', // Versioned PHP->NestJS stripe charge bridge (not user-facing)
   'internal/instantchat', // PHP->NestJS instantCHAT outbound delivery bridge (not user-facing)
+  'internal/reconciliation', // PHP->NestJS reconciliation LLM-classify bridge (not user-facing, #4165)
+  'v1/internal/reconciliation', // Versioned PHP->NestJS reconciliation LLM-classify bridge (not user-facing, #4165)
   'contact',            // Legacy contact form endpoint
   'roi-calculator',     // Public ROI calculator lead form, not MCP-relevant
   'api/qr',             // QR code generator (image endpoint)
