@@ -87,7 +87,7 @@ export async function updateMessage(
 }
 
 export async function deleteMessage(apiClient: ApiClient, args: { id: number }): Promise<any> {
-  const response = await apiClient.delete(`/v1/messages/${args.id}`);
+  await apiClient.delete(`/v1/messages/${args.id}`);
 
 
   return {

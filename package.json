@@ -39,7 +39,9 @@
     "test:coverage": "vitest run --coverage",
     "check:tool-handlers": "tsx scripts/check-tool-handlers.ts",
     "check:public-package": "node scripts/check-public-package.cjs",
-    "prepublishOnly": "npm run build:public && npm run check:public-package"
+    "prepublishOnly": "npm run build:public && npm run check:public-package",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --deny-warnings --fix"
   },
   "keywords": [
     "mcp",
@@ -74,6 +76,7 @@
   "devDependencies": {
     "@types/node": "^25.6.2",
     "@vitest/coverage-v8": "^4.1.5",
+    "oxlint": "1.71.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"

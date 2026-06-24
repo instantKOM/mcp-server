@@ -58,7 +58,7 @@ try {
 let parsed;
 try {
   parsed = JSON.parse(packOutput);
-} catch (err) {
+} catch {
   console.error('[check-public-package] could not parse npm pack output');
   process.exit(2);
 }

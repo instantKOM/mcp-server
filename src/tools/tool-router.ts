@@ -48,14 +48,14 @@ function snakeToCamel(name: string): string {
 /**
  * Generate candidate handler names for a tool.
  *
- * Tool naming conventions vary across scopes:
+ * Tool naming conventions vary by tool name prefix:
  * - app:      'list_channels'           -> listChannels
  * - admin:    'admin_list_plans'        -> listAdminPlans
  * - internal: 'internal_list_companies' -> listCompanies
  *
  * This function returns all plausible camelCase names to try.
  */
-function getCandidateNames(toolName: string, scope: string): string[] {
+function getCandidateNames(toolName: string): string[] {
   const direct = snakeToCamel(toolName);
   const candidates = [direct];
 
@@ -95,7 +95,7 @@ function autoRegister(
   scope: string,
 ) {
   for (const tool of tools) {
-    const candidates = getCandidateNames(tool.name, scope);
+    const candidates = getCandidateNames(tool.name);
     let found = false;
 
     for (const name of candidates) {

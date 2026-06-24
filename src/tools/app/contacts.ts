@@ -72,7 +72,7 @@ export async function updateContact(
 }
 
 export async function deleteContact(apiClient: ApiClient, args: { id: number }): Promise<any> {
-  const response = await apiClient.delete(`/v1/contacts/${args.id}`);
+  await apiClient.delete(`/v1/contacts/${args.id}`);
 
 
   return {

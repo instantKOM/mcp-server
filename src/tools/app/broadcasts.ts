@@ -98,7 +98,7 @@ export async function sendBroadcast(
 }
 
 export async function deleteBroadcast(apiClient: ApiClient, args: { id: number }): Promise<any> {
-  const response = await apiClient.delete(`/v1/broadcasts/${args.id}`);
+  await apiClient.delete(`/v1/broadcasts/${args.id}`);
 
 
   return {
