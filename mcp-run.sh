@@ -8,7 +8,7 @@
 #
 # Supported TENANT_IDs:
 #   local      - Local dev (localhost:3002), API key from DB
-#   staging    - Staging (api-staging.instantkom.de), API key from vault
+#   staging    - Staging (api.staging.instantkom.de), API key from vault
 #   production - Production (api.instantkom.app), API key from vault
 #
 # The script resolves API_KEY and API_URL automatically, then starts the MCP server.
@@ -65,7 +65,7 @@ case "$TENANT_ID" in
     ;;
 
   staging)
-    export API_URL="https://api-staging.instantkom.de"
+    export API_URL="https://api.staging.instantkom.de"
     export TENANT_ID="staging"
     if [ -z "${API_KEY:-}" ]; then
       if command -v vault-get &>/dev/null; then
@@ -189,7 +189,7 @@ resolve_other_tenant_creds() {
   # Write all resolved credentials to env file
   {
     echo "TENANT_INTERNAL_API_URL=http://localhost:3002"
-    echo "TENANT_STAGING_API_URL=https://api-staging.instantkom.de"
+    echo "TENANT_STAGING_API_URL=https://api.staging.instantkom.de"
     echo "TENANT_INTERNAL_PROD_API_URL=https://api.instantkom.app"
     echo "TENANT_CUSTOMER_LOCAL_API_URL=http://localhost:3002"
     [ -s "$TMPDIR/local_api_key" ] && echo "TENANT_INTERNAL_API_KEY=$(cat "$TMPDIR/local_api_key" | tr -d '\n\r')"

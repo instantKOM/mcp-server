@@ -13,7 +13,7 @@
 #   JWT_PASSWORD=secret ./scripts/get-jwt.sh --login admin
 #
 #   # Login against a different API
-#   API_URL=https://api-staging.instantkom.de ./scripts/get-jwt.sh --login admin
+#   API_URL=https://api.staging.instantkom.de ./scripts/get-jwt.sh --login admin
 #
 #   # Just output the access token (for piping)
 #   ./scripts/get-jwt.sh --login admin --token-only
