@@ -65,6 +65,7 @@ const IGNORED_PREFIXES = [
   'v1/conversion-tracking/webhook', // Inbound webhook, not MCP-relevant
   'v1/channels/',       // Channel-scoped sub-endpoints (duplicates of /v1/tickets etc.)
   'public/instantchat', // Anonymous visitor website-chat endpoints, not integrator MCP tools (Issue #3643)
+  'public/embed', // Anonymous edge-delivery routes (script/image/301), not integrator MCP tools (Issue #4543, Simon-approved 2026-06-20)
 ];
 
 /**
