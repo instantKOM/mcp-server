@@ -1,0 +1,50 @@
+{
+  "id": "campaign-from-brief",
+  "name": "Campaign from a brief (server-side)",
+  "version": "1.0.0",
+  "description": "Turn a short campaign brief into an audience segment and a ready-to-review broadcast draft on the target channel in one encapsulated server-side run.",
+  "requiredScope": "send",
+  "delivery": "composite",
+  "minTier": "business",
+  "tags": ["campaign", "broadcast", "segmentation", "marketing", "composite"],
+  "inputs": {
+    "channelId": {
+      "type": "number",
+      "description": "Channel the campaign broadcast is drafted on.",
+      "required": true
+    },
+    "segmentName": {
+      "type": "string",
+      "description": "Name for the audience segment created from the brief.",
+      "required": true
+    },
+    "brief": {
+      "type": "string",
+      "description": "Short description of the target audience and campaign goal, stored as the segment description.",
+      "required": true
+    },
+    "message": {
+      "type": "string",
+      "description": "The campaign broadcast message copy (max 4096 characters).",
+      "required": true
+    }
+  },
+  "steps": [
+    {
+      "id": "segment",
+      "tool": "create_segmentation",
+      "args": {
+        "name": "{{inputs.segmentName}}",
+        "description": "{{inputs.brief}}"
+      }
+    },
+    {
+      "id": "draft",
+      "tool": "create_broadcast",
+      "args": {
+        "channelId": "{{inputs.channelId}}",
+        "message": "{{inputs.message}}"
+      }
+    }
+  ]
+}

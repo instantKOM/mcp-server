@@ -122,7 +122,7 @@ export const channelTools = [
   },
   {
     name: 'get_channel_kpis',
-    description: 'Get KPIs for a specific channel including contacts, messages, broadcasts, and engagement metrics',
+    description: 'Get KPIs for a specific channel including contacts, messages, newsletters, and engagement metrics',
     inputSchema: {
       type: 'object',
       properties: {

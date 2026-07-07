@@ -1,0 +1,22 @@
+{
+  "id": "lead-qualify",
+  "name": "Qualify and route an inbound lead",
+  "version": "1.0.0",
+  "description": "Score a fresh inbound conversation against a qualification rubric, tag it, and prepare a routing recommendation and reply draft without sending anything.",
+  "requiredScope": "draft",
+  "delivery": "prompt",
+  "minTier": "business",
+  "tags": ["sales", "leads", "qualification", "inbox", "routing"],
+  "inputs": {
+    "channelId": {
+      "type": "number",
+      "description": "Channel whose new inbound conversations should be qualified.",
+      "required": true
+    },
+    "lookbackDays": {
+      "type": "number",
+      "description": "Only consider conversations whose first inbound message is within this many days.",
+      "default": 7
+    }
+  }
+}

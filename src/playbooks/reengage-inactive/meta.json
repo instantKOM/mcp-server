@@ -1,0 +1,45 @@
+{
+  "id": "reengage-inactive",
+  "name": "Reengage inactive contacts (server-side)",
+  "version": "1.0.0",
+  "description": "Segment a channel's contacts and create a re-engagement broadcast draft for them in one encapsulated server-side run.",
+  "requiredScope": "send",
+  "delivery": "composite",
+  "minTier": "business",
+  "tags": ["engagement", "broadcast", "retention", "composite"],
+  "inputs": {
+    "channelId": {
+      "type": "number",
+      "description": "The channel whose contacts should be re-engaged.",
+      "required": true
+    },
+    "message": {
+      "type": "string",
+      "description": "The re-engagement broadcast message content.",
+      "required": true
+    },
+    "limit": {
+      "type": "number",
+      "description": "Maximum number of contacts to sample when sizing the segment.",
+      "default": 100
+    }
+  },
+  "steps": [
+    {
+      "id": "segment",
+      "tool": "list_contacts",
+      "args": {
+        "channelId": "{{inputs.channelId}}",
+        "limit": "{{inputs.limit}}"
+      }
+    },
+    {
+      "id": "draft",
+      "tool": "create_broadcast",
+      "args": {
+        "channelId": "{{inputs.channelId}}",
+        "message": "{{inputs.message}}"
+      }
+    }
+  ]
+}

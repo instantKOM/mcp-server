@@ -19,12 +19,8 @@ import { ApiClient } from '@instantkom/api-client';
 import type { TenantConfig } from './types/index.js';
 
 // Import tools
-import { publicTools } from './tools/public/index.js';
-import { appTools } from './tools/app/index.js';
-import { adminTools } from './tools/admin/index.js';
-import { internalTools } from './tools/internal/index.js';
-import { metaTools } from './tools/meta/index.js';
 import { executeTool } from './tools/tool-router.js';
+import { getToolsForTenant } from './tools/tool-selection.js';
 import {
   initSentry,
   captureMcpException,
@@ -37,8 +33,6 @@ config();
 // Initialize error monitoring (no-op unless SENTRY_ENABLED + SENTRY_DSN set).
 // Top-level await: completes during startup, well before any tool call.
 await initSentry();
-
-const META_TOOL_NAMES = new Set(metaTools.map((t) => t.name));
 
 class InstantKomMcpServer {
   private server: Server;
@@ -120,34 +114,7 @@ class InstantKomMcpServer {
   }
 
   private getToolsForTenant(tenant: TenantConfig): any[] {
-    const tools: any[] = [...metaTools, ...publicTools];
-
-    if (tenant.scope === 'app' || tenant.scope === 'admin') {
-      tools.push(...appTools);
-    }
-
-    if (tenant.scope === 'admin') {
-      tools.push(...adminTools);
-    }
-
-    if (tenant.scope === 'internal' || tenant.scope === 'admin') {
-      tools.push(...internalTools);
-    }
-
-    // Filter by enabledTools if configured (meta tools are never filtered)
-    if (tenant.enabledTools && tenant.enabledTools.length > 0) {
-      const enabledPatterns = tenant.enabledTools.map(
-        (pattern) => new RegExp('^' + pattern.replace('*', '.*') + '$')
-      );
-
-      return tools.filter(
-        (tool) =>
-          META_TOOL_NAMES.has(tool.name) ||
-          enabledPatterns.some((pattern) => pattern.test(tool.name))
-      );
-    }
-
-    return tools;
+    return getToolsForTenant(tenant, { includeMeta: true });
   }
 
   private setupHandlers(): void {

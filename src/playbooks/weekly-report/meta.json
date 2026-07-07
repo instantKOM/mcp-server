@@ -1,0 +1,21 @@
+{
+  "id": "weekly-report",
+  "name": "Weekly messaging performance report",
+  "version": "1.0.0",
+  "description": "Pull the week's messaging, broadcast and contact analytics and turn them into a concise narrative report with trends, anomalies and next actions.",
+  "requiredScope": "read",
+  "delivery": "prompt",
+  "minTier": "business",
+  "tags": ["reporting", "analytics", "insights", "weekly"],
+  "inputs": {
+    "channelId": {
+      "type": "number",
+      "description": "Optional: restrict the report to a single channel. Omit for an account-wide report."
+    },
+    "weeks": {
+      "type": "number",
+      "description": "How many trailing weeks to compare against for trend context.",
+      "default": 4
+    }
+  }
+}

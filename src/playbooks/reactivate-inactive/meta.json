@@ -1,0 +1,17 @@
+{
+  "id": "reactivate-inactive",
+  "name": "Reactivate inactive contacts",
+  "version": "1.0.0",
+  "description": "Find contacts with no recent inbound activity and draft a personalized re-engagement broadcast to win them back.",
+  "requiredScope": "send",
+  "delivery": "prompt",
+  "minTier": "business",
+  "tags": ["engagement", "broadcast", "retention"],
+  "inputs": {
+    "inactiveSinceDays": {
+      "type": "number",
+      "description": "Consider a contact inactive when their last inbound message is older than this many days.",
+      "default": 90
+    }
+  }
+}

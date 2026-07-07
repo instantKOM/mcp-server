@@ -51,7 +51,7 @@ export async function deleteBroadcastMedia(apiClient: ApiClient, args: { id: num
     content: [
       {
         type: 'text',
-        text: 'Broadcast media deleted successfully',
+        text: 'Newsletter media deleted successfully',
       },
     ],
   };
@@ -112,44 +112,44 @@ export async function deleteMessageMedia(apiClient: ApiClient, args: { id: numbe
 export const mediaTools = [
   {
     name: 'get_broadcast_media',
-    description: 'Get broadcast media information',
+    description: 'Get newsletter media information',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'number', description: 'Broadcast ID' },
+        id: { type: 'number', description: 'Newsletter ID' },
       },
       required: ['id'],
     },
   },
   {
     name: 'download_broadcast_media',
-    description: 'Download broadcast media file',
+    description: 'Download newsletter media file',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'number', description: 'Broadcast ID' },
+        id: { type: 'number', description: 'Newsletter ID' },
       },
       required: ['id'],
     },
   },
   {
     name: 'get_broadcast_media_thumbnail',
-    description: 'Get broadcast media thumbnail',
+    description: 'Get newsletter media thumbnail',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'number', description: 'Broadcast ID' },
+        id: { type: 'number', description: 'Newsletter ID' },
       },
       required: ['id'],
     },
   },
   {
     name: 'delete_broadcast_media',
-    description: 'Delete broadcast media',
+    description: 'Delete newsletter media',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'number', description: 'Broadcast ID' },
+        id: { type: 'number', description: 'Newsletter ID' },
       },
       required: ['id'],
     },

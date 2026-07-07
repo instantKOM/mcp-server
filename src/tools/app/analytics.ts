@@ -138,7 +138,7 @@ export const analyticsTools = [
   },
   {
     name: 'get_broadcasts_analytics',
-    description: 'Get broadcasts analytics and campaign performance',
+    description: 'Get newsletters analytics and campaign performance',
     inputSchema: {
       type: 'object',
       properties: {

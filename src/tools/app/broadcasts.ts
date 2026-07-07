@@ -105,7 +105,7 @@ export async function deleteBroadcast(apiClient: ApiClient, args: { id: number }
     content: [
       {
         type: 'text',
-        text: 'Broadcast deleted successfully',
+        text: 'Newsletter deleted successfully',
       },
     ],
   };
@@ -114,7 +114,7 @@ export async function deleteBroadcast(apiClient: ApiClient, args: { id: number }
 export const broadcastTools = [
   {
     name: 'list_broadcasts',
-    description: 'List all broadcasts with optional filtering by channel',
+    description: 'List all newsletters with optional filtering by channel',
     inputSchema: {
       type: 'object',
       properties: {
@@ -136,13 +136,13 @@ export const broadcastTools = [
   },
   {
     name: 'get_broadcast',
-    description: 'Get a specific broadcast by ID',
+    description: 'Get a specific newsletter by ID',
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'number',
-          description: 'Broadcast ID',
+          description: 'Newsletter ID',
         },
       },
       required: ['id'],
@@ -150,7 +150,7 @@ export const broadcastTools = [
   },
   {
     name: 'create_broadcast',
-    description: 'Create a new broadcast campaign',
+    description: 'Create a new newsletter campaign',
     inputSchema: {
       type: 'object',
       properties: {
@@ -160,24 +160,24 @@ export const broadcastTools = [
         },
         message: {
           type: 'string',
-          description: 'Broadcast message content (max 4096 characters)',
+          description: 'Newsletter message content (max 4096 characters)',
         },
         broadcastType: {
           type: 'string',
-          description: 'Broadcast type (default: text)',
+          description: 'Newsletter type (default: text)',
           enum: ['text', 'image', 'video', 'audio', 'document'],
         },
         scheduledAt: {
           type: 'number',
-          description: 'Schedule broadcast for future send (Unix timestamp)',
+          description: 'Schedule newsletter for future send (Unix timestamp)',
         },
         test: {
           type: 'boolean',
-          description: 'Test broadcast flag',
+          description: 'Test newsletter flag',
         },
         autoApprove: {
           type: 'boolean',
-          description: 'Auto-approve broadcast (requires permission)',
+          description: 'Auto-approve newsletter (requires permission)',
         },
         sendStatus: {
           type: 'number',
@@ -189,13 +189,13 @@ export const broadcastTools = [
   },
   {
     name: 'update_broadcast',
-    description: 'Update an existing broadcast',
+    description: 'Update an existing newsletter',
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'number',
-          description: 'Broadcast ID',
+          description: 'Newsletter ID',
         },
         channelId: {
           type: 'number',
@@ -203,24 +203,24 @@ export const broadcastTools = [
         },
         message: {
           type: 'string',
-          description: 'Broadcast message content (max 4096 characters)',
+          description: 'Newsletter message content (max 4096 characters)',
         },
         broadcastType: {
           type: 'string',
-          description: 'Broadcast type',
+          description: 'Newsletter type',
           enum: ['text', 'image', 'video', 'audio', 'document'],
         },
         scheduledAt: {
           type: 'number',
-          description: 'Schedule broadcast for future send (Unix timestamp)',
+          description: 'Schedule newsletter for future send (Unix timestamp)',
         },
         test: {
           type: 'boolean',
-          description: 'Test broadcast flag',
+          description: 'Test newsletter flag',
         },
         autoApprove: {
           type: 'boolean',
-          description: 'Auto-approve broadcast (requires permission)',
+          description: 'Auto-approve newsletter (requires permission)',
         },
         sendStatus: {
           type: 'number',
@@ -232,13 +232,13 @@ export const broadcastTools = [
   },
   {
     name: 'send_broadcast',
-    description: 'Send a broadcast immediately',
+    description: 'Send a newsletter immediately',
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'number',
-          description: 'Broadcast ID',
+          description: 'Newsletter ID',
         },
       },
       required: ['id'],
@@ -246,13 +246,13 @@ export const broadcastTools = [
   },
   {
     name: 'delete_broadcast',
-    description: 'Delete a broadcast by ID',
+    description: 'Delete a newsletter by ID',
     inputSchema: {
       type: 'object',
       properties: {
         id: {
           type: 'number',
-          description: 'Broadcast ID',
+          description: 'Newsletter ID',
         },
       },
       required: ['id'],

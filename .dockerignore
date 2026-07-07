@@ -1,0 +1,16 @@
+# NOTE: the gateway image is built with the REPO ROOT as context (it needs
+# packages/api-client), so the AUTHORITATIVE ignore file for that build is the
+# root .dockerignore + the surgical COPYs in the Dockerfile. This file only
+# takes effect if someone builds with services/mcp-server as the context; it is
+# kept so a standalone build stays lean and never bakes stale build output.
+node_modules
+dist
+coverage
+*.log
+.env
+.env.*
+.git
+.github
+.claude
+*.md
+src/tests
