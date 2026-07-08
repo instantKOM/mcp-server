@@ -13,8 +13,19 @@
 
 import { Redis } from 'ioredis';
 import type { RedisLike } from './rate-limiter.js';
+import { alertRedisOutage } from '../monitoring/redis-outage-alert.js';
 
 let singleton: Redis | null = null;
+
+/**
+ * Whether to enable TLS for a host/port Redis connection (issue #5412). A
+ * `rediss://` REDIS_URL already negotiates TLS in ioredis by itself; this flag
+ * covers the host/port form, where a non-localhost Redis would otherwise run
+ * UNENCRYPTED. Set `REDIS_TLS=true` for a managed/remote Redis.
+ */
+function tlsEnabled(env: NodeJS.ProcessEnv): boolean {
+  return (env.REDIS_TLS ?? '').trim().toLowerCase() === 'true';
+}
 
 /**
  * Build (once) the shared ioredis client from the environment, or return null
@@ -39,17 +50,25 @@ export function getRateLimitRedis(
   };
 
   singleton = url
-    ? new Redis(url, common)
+    ? // `rediss://` in the URL turns on TLS in ioredis on its own; REDIS_TLS is
+      // the host/port knob below and does not apply to the URL form.
+      new Redis(url, common)
     : new Redis({
         host,
         port: Number.parseInt(env.REDIS_PORT ?? '6379', 10) || 6379,
         password: env.REDIS_PASSWORD || undefined,
+        // Enforce TLS for a remote host/port Redis so credentials + rate-limit
+        // keys are not sent in clear. `{}` uses Node's default trust store.
+        ...(tlsEnabled(env) ? { tls: {} } : {}),
         ...common,
       });
 
   singleton.on('error', (err: Error) => {
     // Logged once here; the limiter also logs the fail-open per request.
     console.error(`[RateLimit] Redis connection error: ${err.message}`);
+    // Surface a SUSTAINED outage to Sentry (throttled) -- fail-open otherwise
+    // hides that abuse protection is off. See redis-outage-alert.ts (#5412).
+    alertRedisOutage(`[RateLimit] Redis connection error: ${err.message}`);
   });
 
   return singleton;

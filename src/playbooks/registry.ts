@@ -31,6 +31,7 @@ import {
   grantedScopeLevel,
   isToolAllowedForScopes,
   compositeRequiredScope,
+  resolveToolScope,
   type ToolScope,
 } from '../tools/tool-scopes.js';
 
@@ -432,7 +433,75 @@ function validateSteps(
     };
   });
 
+  assertContentProvenance(steps, file);
+
   return steps;
+}
+
+/**
+ * Content-arg keys of a `send` step whose VALUE is delivered verbatim to a
+ * recipient (message body, subject, ...). Templating a `read` step's output
+ * into one of these is the data-exfiltration / prompt-injection surface the
+ * provenance contract forbids (issue #5412). Recipient-TARGET keys (`to`,
+ * `recipient`, `contactId`, `phone`, ...) are deliberately NOT here: a
+ * read-contacts -> send-to-each flow (e.g. reengage-inactive) is legitimate.
+ */
+const SEND_CONTENT_ARG_KEYS = new Set([
+  'message',
+  'text',
+  'body',
+  'content',
+  'caption',
+  'subject',
+  'html',
+  'note',
+  'comment',
+]);
+
+const STEP_TEMPLATE_REF = /\{\{\s*steps\.([A-Za-z0-9_-]+)\.[^}]*\}\}/g;
+
+/**
+ * Content-provenance contract (#5412): a `send`-scoped step MUST NOT template a
+ * `read`-scoped step's output into a delivered-content arg. Read output can be
+ * attacker-controlled (a contact's own message text, external content); letting
+ * it flow unfiltered into a send body turns a composite into an exfil / echo
+ * primitive. Enforced statically at load so no such playbook can ship -- composite
+ * programs come only from the trusted registry, never from LLM/user input, so the
+ * static gate is the full boundary. Throws `PlaybookValidationError` on violation.
+ */
+function assertContentProvenance(steps: PlaybookStep[], file: string): void {
+  const scopeById = new Map<string, ToolScope>(
+    steps.map((s) => [s.id, resolveToolScope({ name: s.tool })])
+  );
+
+  for (const step of steps) {
+    if (resolveToolScope({ name: step.tool }) !== 'send' || !step.args) continue;
+    for (const [key, value] of Object.entries(step.args)) {
+      if (!SEND_CONTENT_ARG_KEYS.has(key.toLowerCase())) continue;
+      for (const refId of collectStepRefs(value)) {
+        if (scopeById.get(refId) === 'read') {
+          throw new PlaybookValidationError(
+            `content-provenance violation: send step '${step.id}' templates read ` +
+              `step '${refId}' output into content arg '${key}'. Read output must ` +
+              `not flow into delivered content (exfil/injection guard, #5412).`,
+            file
+          );
+        }
+      }
+    }
+  }
+}
+
+/** Collect all `{{steps.<id>...}}` step ids referenced anywhere in a value tree. */
+function collectStepRefs(value: unknown, acc: Set<string> = new Set()): Set<string> {
+  if (typeof value === 'string') {
+    for (const m of value.matchAll(STEP_TEMPLATE_REF)) acc.add(m[1]);
+  } else if (Array.isArray(value)) {
+    for (const v of value) collectStepRefs(v, acc);
+  } else if (value && typeof value === 'object') {
+    for (const v of Object.values(value as Record<string, unknown>)) collectStepRefs(v, acc);
+  }
+  return acc;
 }
 
 /**

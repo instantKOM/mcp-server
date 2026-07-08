@@ -34,6 +34,7 @@ import {
   buildRateLimitIdentity,
 } from './rate-limiter.js';
 import { getRateLimitRedis } from './redis-client.js';
+import { alertRedisOutage } from '../monitoring/redis-outage-alert.js';
 import type { TenantConfig } from '../types/index.js';
 
 export interface HttpGatewayOptions {
@@ -133,7 +134,17 @@ export class HttpGateway {
       return null;
     }
 
-    return new RateLimiter({ store: new RedisRateLimitStore(redis), config });
+    return new RateLimiter({
+      store: new RedisRateLimitStore(redis),
+      config,
+      // Fail-open per request logs loudly AND alerts Sentry (throttled) so a
+      // sustained Redis outage -- during which the rate cap is silently off --
+      // is production-visible instead of buried in stdout (#5412).
+      warn: (message) => {
+        console.error(message);
+        alertRedisOutage(message);
+      },
+    });
   }
 
   /**
