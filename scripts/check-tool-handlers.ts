@@ -3,8 +3,8 @@
  *
  * Fails if any MCP tool is advertised (appears in ListTools / tool defs) but has
  * no registered handler function. The tool-router auto-registers handlers by
- * name convention; a mismatch (e.g. handler `resendBroadcast` vs. expected
- * `adminBroadcastsResend`) silently leaves the tool dead -- every call throws
+ * name convention; a mismatch (e.g. handler `resendMail` vs. expected
+ * `adminResendMail`) silently leaves the tool dead -- every call throws
  * "Unknown tool". The path-based check:api-coverage cannot catch this because
  * the source still contains the API path string.
  *

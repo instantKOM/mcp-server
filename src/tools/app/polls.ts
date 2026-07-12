@@ -184,10 +184,11 @@ export const pollTools = [
       type: 'object',
       properties: {
         channelId: { type: 'number', description: 'Channel ID' },
-        question: { type: 'string', description: 'Poll question' },
-        multipleChoice: { type: 'boolean', description: 'Allow multiple selections' },
+        name: { type: 'string', description: 'Poll name/title (max 80 chars)' },
+        description: { type: 'string', description: 'Poll description' },
+        allowMultipleVotes: { type: 'boolean', description: 'Allow multiple votes per user' },
       },
-      required: ['channelId', 'question'],
+      required: ['channelId', 'name'],
     },
   },
   {
@@ -197,8 +198,9 @@ export const pollTools = [
       type: 'object',
       properties: {
         id: { type: 'number', description: 'Poll ID' },
-        question: { type: 'string', description: 'Poll question' },
-        multipleChoice: { type: 'boolean', description: 'Allow multiple selections' },
+        name: { type: 'string', description: 'Poll name/title (max 80 chars)' },
+        description: { type: 'string', description: 'Poll description' },
+        allowMultipleVotes: { type: 'boolean', description: 'Allow multiple votes per user' },
       },
       required: ['id'],
     },
@@ -246,9 +248,10 @@ export const pollTools = [
       type: 'object',
       properties: {
         pollId: { type: 'number', description: 'Poll ID' },
-        text: { type: 'string', description: 'Option text' },
+        name: { type: 'string', description: 'Option name/text (max 100 chars)' },
+        key: { type: 'number', description: 'Option key/value (numeric identifier)' },
       },
-      required: ['pollId', 'text'],
+      required: ['pollId', 'name', 'key'],
     },
   },
   {
@@ -259,7 +262,8 @@ export const pollTools = [
       properties: {
         pollId: { type: 'number', description: 'Poll ID' },
         optionId: { type: 'number', description: 'Option ID' },
-        text: { type: 'string', description: 'Option text' },
+        name: { type: 'string', description: 'Option name/text (max 100 chars)' },
+        key: { type: 'number', description: 'Option key/value (numeric identifier)' },
       },
       required: ['pollId', 'optionId'],
     },

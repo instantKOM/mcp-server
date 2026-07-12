@@ -114,20 +114,24 @@ export const shortLinkTools = [
     inputSchema: {
       type: 'object',
       properties: {
-        url: {
+        originalUrl: {
           type: 'string',
-          description: 'Target URL to shorten',
+          description: 'Original/destination URL to shorten',
         },
-        name: {
+        referenceType: {
           type: 'string',
-          description: 'Short link name for identification',
+          description: 'Reference type (b=broadcast, m=message, o=other)',
         },
-        customAlias: {
-          type: 'string',
-          description: 'Custom alias for the short link (optional)',
+        referenceId: {
+          type: 'number',
+          description: 'Reference ID (broadcast ID, message ID, etc.)',
+        },
+        folderId: {
+          type: 'number',
+          description: 'Object folder ID (optional)',
         },
       },
-      required: ['url'],
+      required: ['originalUrl'],
     },
   },
   {
@@ -140,13 +144,13 @@ export const shortLinkTools = [
           type: 'number',
           description: 'Short link ID',
         },
-        url: {
+        originalUrl: {
           type: 'string',
-          description: 'Target URL',
+          description: 'Original/destination URL',
         },
-        name: {
-          type: 'string',
-          description: 'Short link name',
+        folderId: {
+          type: 'number',
+          description: 'Object folder ID (optional)',
         },
       },
       required: ['id'],

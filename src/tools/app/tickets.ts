@@ -44,7 +44,11 @@ export async function getTicket(apiClient: ApiClient, args: { id: number }): Pro
 }
 
 export async function createTicket(apiClient: ApiClient, args: any): Promise<any> {
-  const response = await apiClient.post('/v1/tickets', args);
+  const { channelId, ...data } = args;
+  if (!channelId || typeof channelId !== 'number') {
+    throw new Error('channelId is required for create_ticket');
+  }
+  const response = await apiClient.post(`/v1/channels/${channelId}/tickets`, data);
 
   return {
     content: [
@@ -73,8 +77,12 @@ export async function updateTicket(apiClient: ApiClient, args: any): Promise<any
   };
 }
 
-export async function deleteTicket(apiClient: ApiClient, args: { id: number }): Promise<any> {
-  await apiClient.delete(`/v1/tickets/${args.id}`);
+export async function deleteTicket(apiClient: ApiClient, args: { id: number; channelId: number }): Promise<any> {
+  const { id, channelId } = args;
+  if (!channelId || typeof channelId !== 'number') {
+    throw new Error('channelId is required for delete_ticket');
+  }
+  await apiClient.delete(`/v1/channels/${channelId}/tickets/${id}`);
 
   return {
     content: [
@@ -130,19 +138,11 @@ export async function createTicketMessage(apiClient: ApiClient, args: any): Prom
   };
 }
 
-export async function updateTicketMessage(apiClient: ApiClient, args: any): Promise<any> {
-  const { ticketId, messageId, ...data } = args;
-  const response = await apiClient.put(`/v1/tickets/${ticketId}/messages/${messageId}`, data);
-
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(response, null, 2),
-      },
-    ],
-  };
-}
+// NOTE: update_ticket_message intentionally NOT supported. Ticket messages
+// (tickets_msgs) are an immutable rx/tx conversation log with no draft state;
+// editing a message would falsify either an already-transmitted outbound
+// message or a received customer message. There is deliberately no API route
+// and no MCP tool for editing ticket messages (#5720).
 
 export async function deleteTicketMessage(apiClient: ApiClient, args: { ticketId: number; messageId: number }): Promise<any> {
   await apiClient.delete(`/v1/tickets/${args.ticketId}/messages/${args.messageId}`);
@@ -244,8 +244,9 @@ export const ticketTools = [
       type: 'object',
       properties: {
         id: { type: 'number', description: 'Ticket ID' },
+        channelId: { type: 'number', description: 'Channel ID the ticket belongs to' },
       },
-      required: ['id'],
+      required: ['id', 'channelId'],
     },
   },
 
@@ -291,19 +292,6 @@ export const ticketTools = [
         internal: { type: 'boolean', description: 'Internal note (not visible to customer)' },
       },
       required: ['ticketId', 'message'],
-    },
-  },
-  {
-    name: 'update_ticket_message',
-    description: 'Update a ticket message',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ticketId: { type: 'number', description: 'Ticket ID' },
-        messageId: { type: 'number', description: 'Message ID' },
-        message: { type: 'string', description: 'Updated message text' },
-      },
-      required: ['ticketId', 'messageId'],
     },
   },
   {

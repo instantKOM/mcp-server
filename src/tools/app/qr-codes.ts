@@ -127,9 +127,9 @@ export const qrCodeTools = [
           type: 'string',
           description: 'QR code name for identification',
         },
-        parameterValue: {
+        keyword: {
           type: 'string',
-          description: 'Parameter value to track QR code scans',
+          description: 'Tracking keyword to track QR code scans',
         },
       },
       required: ['channelId', 'name'],

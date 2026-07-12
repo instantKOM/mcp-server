@@ -185,12 +185,16 @@ export const customFieldTools = [
     inputSchema: {
       type: 'object',
       properties: {
-        key: { type: 'string', description: 'Unique field key (e.g. customer_id)' },
+        key: { type: 'string', description: 'Unique field key, lowercase alphanumeric and underscores only (e.g. customer_id)' },
         name: { type: 'string', description: 'Display name' },
-        type: { type: 'string', description: 'Field type (text, number, date, boolean, select)' },
-        options: { type: 'array', items: { type: 'string' }, description: 'Options for select type fields' },
+        fieldType: {
+          type: 'string',
+          enum: ['text', 'number', 'date', 'dropdown', 'checkbox', 'url', 'email', 'phone'],
+          description: 'Field type (text, number, date, dropdown, checkbox, url, email, phone)',
+        },
+        options: { type: 'array', items: { type: 'string' }, description: 'Options for dropdown type fields' },
       },
-      required: ['key', 'name', 'type'],
+      required: ['key', 'name', 'fieldType'],
     },
   },
   {

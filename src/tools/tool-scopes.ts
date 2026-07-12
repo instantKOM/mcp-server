@@ -51,7 +51,7 @@ const DRAFT_TOOLS = new Set<string>([
  * Tokens that mark a tool as mutating (`send` stage). Per issue #5192 the
  * `send` stage covers all mutations: send/create/update/delete/etc. Scanned
  * across every underscore-separated token in the tool name, so noun-first admin
- * names (`admin_broadcasts_resend`) are classified correctly too.
+ * names (`admin_resend_mail`) are classified correctly too.
  */
 const MUTATION_TOKENS = new Set<string>([
   'create', 'update', 'delete', 'remove', 'add', 'set', 'send', 'resend',
