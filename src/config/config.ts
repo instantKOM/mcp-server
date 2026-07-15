@@ -77,7 +77,7 @@ export class ConfigLoader {
       }
       console.error(`[Config] Loaded deferred credentials from ${credsFile}`);
     } catch (error) {
-      console.error(`[Config] Could not load deferred credentials: ${error}`);
+      console.error('[Config] Could not load deferred credentials:', error);
     }
   }
 

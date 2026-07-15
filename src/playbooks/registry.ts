@@ -34,6 +34,7 @@ import {
   resolveToolScope,
   type ToolScope,
 } from '../tools/tool-scopes.js';
+import { stringifyUnknown } from '../types/stringify-unknown.js';
 
 /**
  * Semantic Versioning 2.0.0 grammar (the official regex from semver.org,
@@ -74,10 +75,10 @@ export function isValidIsoDate(v: unknown): v is string {
  */
 export function compareSemver(a: string, b: string): number {
   if (!isValidSemver(a)) {
-    throw new Error(`compareSemver: invalid semver '${a}'`);
+    throw new Error("compareSemver: invalid semver '" + a + "'");
   }
   if (!isValidSemver(b)) {
-    throw new Error(`compareSemver: invalid semver '${b}'`);
+    throw new Error("compareSemver: invalid semver '" + b + "'");
   }
   const parse = (v: string): { main: number[]; pre: string[] } => {
     const [core] = v.split('+', 1);
@@ -210,13 +211,13 @@ function validateMeta(raw: unknown, file: string): PlaybookMeta {
   const minTier = requireString('minTier');
 
   if (!isValidSemver(version)) {
-    throw new PlaybookValidationError(`invalid semver version '${version}'`, file);
+    throw new PlaybookValidationError("invalid semver version '" + version + "'", file);
   }
 
   const requiredScope = raw.requiredScope;
   if (!(FINE_SCOPES as readonly unknown[]).includes(requiredScope)) {
     throw new PlaybookValidationError(
-      `invalid requiredScope '${String(requiredScope)}' (expected one of ${FINE_SCOPES.join(', ')})`,
+      `invalid requiredScope '${stringifyUnknown(requiredScope)}' (expected one of ${FINE_SCOPES.join(', ')})`,
       file
     );
   }
@@ -340,13 +341,13 @@ function validateDeprecation(
 
   if (deprecatedSince !== undefined && !isValidSemver(deprecatedSince)) {
     throw new PlaybookValidationError(
-      `invalid semver 'deprecatedSince' '${deprecatedSince}'`,
+      "invalid semver 'deprecatedSince' '" + deprecatedSince + "'",
       file
     );
   }
   if (sunsetAfter !== undefined && !(isValidIsoDate(sunsetAfter) || isValidSemver(sunsetAfter))) {
     throw new PlaybookValidationError(
-      `'sunsetAfter' must be an ISO date (YYYY-MM-DD) or a semver (got '${sunsetAfter}')`,
+      "'sunsetAfter' must be an ISO date (YYYY-MM-DD) or a semver (got '" + sunsetAfter + "')",
       file
     );
   }

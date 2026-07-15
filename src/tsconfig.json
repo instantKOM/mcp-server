@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "../../..",
+    "paths": {
+      "@instantkom/api-client": ["../../../packages/api-client/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "../../../packages/api-client/src/**/*.ts"],
+  "exclude": ["tests/**"]
+}

@@ -44,7 +44,8 @@
     "check:public-package": "node scripts/check-public-package.cjs",
     "prepublishOnly": "npm run build:public && npm run check:public-package",
     "lint": "oxlint --deny-warnings",
-    "lint:fix": "oxlint --deny-warnings --fix"
+    "lint:fix": "oxlint --deny-warnings --fix",
+    "type-check": "node ../../dev/scripts/oxlint-type-check.mjs"
   },
   "keywords": [
     "mcp",
@@ -82,7 +83,8 @@
     "@types/node": "^25.6.2",
     "@vitest/coverage-v8": "^4.1.5",
     "openai": "^6.37.0",
-    "oxlint": "1.71.0",
+    "oxlint": "1.72.0",
+    "oxlint-tsgolint": "0.24.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"

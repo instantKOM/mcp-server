@@ -31,6 +31,7 @@
 
 import type { ApiClient } from '@instantkom/api-client';
 import { executeTool as defaultExecuteTool } from '../tools/tool-router.js';
+import { stringifyUnknown } from '../types/stringify-unknown.js';
 import {
   isToolAllowedForScopes,
   resolveToolScope,
@@ -413,7 +414,7 @@ function resolveStringTemplate(value: string, context: unknown): unknown {
 }
 
 function stringifyScalar(value: unknown): string {
-  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return stringifyUnknown(value);
 }
 
 /** Walk a dotted path (with numeric array indices) through `context`. */
