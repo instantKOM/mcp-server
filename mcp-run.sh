@@ -15,37 +15,18 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TENANT_ID="${TENANT_ID:-local}"
+LOCAL_API_KEY_FIXTURE="${IKM_LOCAL_API_KEY:-pk_instantkom363_devKeyUser01234sk_instantkom363_devKeyPass01234}"
 
 # Resolve API_URL and API_KEY based on TENANT_ID
 case "$TENANT_ID" in
   local|internal)
     export API_URL="http://localhost:3002"
     export TENANT_ID="internal"
-    # Read API key from local DB if not already set
-    # Prefer the seeded instantkom dev account (uid=363) - matches the local admin user
+    # Use the deterministic seeded fixture token. The database stores only its hash.
+    # Override with IKM_LOCAL_API_KEY when a different local key is required.
     if [ -z "${API_KEY:-}" ]; then
-      DB_QUERY="$PROJECT_ROOT/dev/db/query.sh"
-      if [ -x "$DB_QUERY" ]; then
-        API_KEY=$(
-          "$DB_QUERY" --raw "SELECT CONCAT(a.user, a.pass) FROM apis2 a JOIN usrs u ON u.id=a.uid WHERE a.sts=1 AND u.usr='instantkom' ORDER BY a.id ASC LIMIT 1" 2>/dev/null \
-          | tail -1 \
-          | tr -d '\n\r'
-        )
-        # Fallback: any active API key
-        if [ -z "$API_KEY" ]; then
-          API_KEY=$(
-            "$DB_QUERY" --raw "SELECT CONCAT(user, pass) FROM apis2 WHERE sts=1 LIMIT 1" 2>/dev/null \
-            | tail -1 \
-            | tr -d '\n\r'
-          )
-        fi
-      fi
-      if [ -z "${API_KEY:-}" ]; then
-        echo "[mcp-run] WARN: No API key found in local DB. MCP tools requiring auth will fail." >&2
-      fi
+      API_KEY="$LOCAL_API_KEY_FIXTURE"
       export API_KEY
     fi
     # For admin endpoints: resolve JWT credentials.
@@ -168,13 +149,8 @@ resolve_other_tenant_creds() {
     esac
   fi
 
-  # Also resolve local Public API key from apis2 table (always - for customer-local tenant)
-  # Prefer the seeded instantkom dev account (uid=363, usr='instantkom')
-  local DB_QUERY="$PROJECT_ROOT/dev/db/query.sh"
-  if [ -x "$DB_QUERY" ]; then
-    ( "$DB_QUERY" --raw "SELECT CONCAT(a.user, a.pass) FROM apis2 a JOIN usrs u ON u.id=a.uid WHERE a.sts=1 AND u.usr='instantkom' ORDER BY a.id ASC LIMIT 1" 2>/dev/null \
-      | tail -1 | tr -d '\n\r' > "$TMPDIR/local_api_key" || true ) &
-  fi
+  # The local public key is a deterministic fixture because DB storage is hash-only.
+  printf '%s' "$LOCAL_API_KEY_FIXTURE" > "$TMPDIR/local_api_key"
 
   wait
 
