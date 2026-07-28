@@ -17,7 +17,12 @@
  *   idempotency, rate-limiting, fine-grained scope gating. See #5191+.
  */
 
-import { createServer, type Server as HttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type Server as HttpServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { ApiClient } from '@instantkom/api-client';
@@ -31,11 +36,21 @@ import {
   RateLimiter,
   RedisRateLimitStore,
   loadRateLimitConfig,
+  buildCredentialRateLimitIdentity,
   buildRateLimitIdentity,
 } from './rate-limiter.js';
 import { getRateLimitRedis } from './redis-client.js';
 import { alertRedisOutage } from '../monitoring/redis-outage-alert.js';
 import type { TenantConfig } from '../types/index.js';
+import {
+  MCP_ENDPOINT_PATH,
+  MCP_SERVER_CARD,
+  MCP_SERVER_CARD_PATH,
+} from '../discovery/server-card.js';
+import {
+  AGENT_SKILLS_INDEX_PATH,
+  getAgentSkillAsset,
+} from '../discovery/agent-skills.js';
 
 export interface HttpGatewayOptions {
   host?: string;
@@ -51,6 +66,13 @@ export interface HttpGatewayOptions {
    * instance (tests). When Redis is not configured, limiting is skipped.
    */
   rateLimiter?: RateLimiter | null;
+  /** Owner-gated RFC 9728 metadata/challenge configuration. */
+  protectedResource?: {
+    enabled: boolean;
+    resource: string;
+    authorizationServer: string;
+    metadataUrl: string;
+  };
 }
 
 interface SseSession {
@@ -65,6 +87,8 @@ interface SseSession {
    * session closed so the change takes effect on the very next call (#5202).
    */
   authFingerprint: string;
+  /** Non-reversible binding to the exact tenant + bearer used at connect. */
+  credentialFingerprint: string;
 }
 
 /**
@@ -75,11 +99,24 @@ interface SseSession {
  */
 export function authFingerprint(auth: ResolvedAuth): string {
   const scopes = [...(auth.scopes ?? [])].sort();
+  const enabledTools = [...(auth.enabledTools ?? [])].sort();
   return JSON.stringify({
+    tenantId: auth.tenantId,
     scopes,
+    enabledTools,
     tier: auth.tier ?? null,
     pii: auth.piiExposureAllowed === true,
+    agentSend: auth.agentSend === true,
+    oauthClientId: auth.oauthClientId ?? null,
+    oauthFamilyId: auth.oauthFamilyId ?? null,
   });
+}
+
+export function sessionCredentialFingerprint(
+  auth: ResolvedAuth,
+  token: string
+): string {
+  return buildRateLimitIdentity(auth.tenantId, token);
 }
 
 export class HttpGateway {
@@ -92,9 +129,8 @@ export class HttpGateway {
   private readonly configLoader: ConfigLoader;
   /** Per-key rate limiter, or null when disabled / no Redis configured. */
   private readonly rateLimiter: RateLimiter | null;
+  private readonly protectedResource: HttpGatewayOptions['protectedResource'];
 
-  /** Per-tenant ApiClient cache (reuses the same construction as stdio server). */
-  private readonly apiClients = new Map<string, ApiClient>();
   /** Active legacy-SSE sessions, keyed by transport sessionId. */
   private readonly sseSessions = new Map<string, SseSession>();
 
@@ -104,7 +140,7 @@ export class HttpGateway {
     this.host = options.host ?? process.env.MCP_HTTP_HOST ?? '0.0.0.0';
     this.port = options.port ?? Number(process.env.MCP_HTTP_PORT ?? 3005);
     this.basePath = normalizePath(
-      options.basePath ?? process.env.MCP_HTTP_BASE_PATH ?? '/mcp'
+      options.basePath ?? process.env.MCP_HTTP_BASE_PATH ?? MCP_ENDPOINT_PATH
     );
     this.ssePath = `${this.basePath}/sse`;
     this.messagesPath = `${this.basePath}/messages`;
@@ -114,6 +150,24 @@ export class HttpGateway {
       options.rateLimiter === undefined
         ? this.buildDefaultRateLimiter()
         : options.rateLimiter;
+    this.protectedResource = options.protectedResource ?? {
+      enabled: process.env.OAUTH_PROTECTED_RESOURCES_ENABLED === 'true',
+      resource: process.env.OAUTH_MCP_RESOURCE ?? '',
+      authorizationServer: process.env.OAUTH_AUTHORIZATION_SERVER ?? '',
+      metadataUrl: process.env.OAUTH_MCP_RESOURCE_METADATA_URL ?? '',
+    };
+  }
+
+  private oauthChallenge(
+    scope = 'read',
+    error?: 'invalid_token' | 'insufficient_scope'
+  ): Record<string, string> | undefined {
+    const resource = this.protectedResource;
+    if (!resource?.enabled || !resource.metadataUrl) return undefined;
+    const errorParameter = error ? `, error="${error}"` : '';
+    return {
+      'WWW-Authenticate': `Bearer resource_metadata="${resource.metadataUrl}", scope="${scope}"${errorParameter}`,
+    };
   }
 
   /**
@@ -175,13 +229,52 @@ export class HttpGateway {
    * a no-op when no API URL is configured (local/stdio-style config mode), so the
    * gateway still serves requests without an audit backend.
    */
-  private buildAuditSink(token: string): AuditSink {
+  private buildAuditSink(token: string, auth: ResolvedAuth): AuditSink {
     const apiUrl =
       process.env.MCP_RESOLVER_API_URL ?? process.env.INSTANTKOM_API_URL;
     if (!apiUrl) {
       return new NoopAuditSink();
     }
-    return new Apis2AuditSink({ apiUrl, token });
+    return new Apis2AuditSink({
+      apiUrl,
+      token,
+      oauthCredentialId: auth.oauthCredentialId,
+      proofSecret: process.env.MCP_AUDIT_PROOF_SECRET, // pragma: allowlist secret -- environment access, not secret material
+    });
+  }
+
+  private proofCorrelationId(
+    req: IncomingMessage,
+    res: ServerResponse,
+    auth: ResolvedAuth
+  ): string | undefined | null {
+    const raw = req.headers['x-instantkom-proof-correlation-id'];
+    if (raw === undefined) return undefined;
+    const value = Array.isArray(raw) ? undefined : raw;
+    if (
+      !value ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value
+      )
+    ) {
+      writeJson(res, 400, {
+        error: 'invalid_proof_correlation',
+        message: 'Proof correlation must be one UUID v4 header value.',
+      });
+      return null;
+    }
+    if (
+      !auth.oauthCredentialId ||
+      (process.env.MCP_AUDIT_PROOF_SECRET?.length ?? 0) < 32
+    ) {
+      writeJson(res, 403, {
+        error: 'proof_correlation_unavailable',
+        message:
+          'Proof correlation requires OAuth authentication and configured gateway attestation.',
+      });
+      return null;
+    }
+    return value;
   }
 
   /**
@@ -192,23 +285,6 @@ export class HttpGateway {
   private maxToolCallsPerRun(): number | undefined {
     const raw = Number(process.env.MCP_MAX_TOOL_CALLS_PER_RUN);
     return Number.isFinite(raw) && raw > 0 ? raw : undefined;
-  }
-
-  /**
-   * Resolve (and cache) the ApiClient bound to a tenant. Keyed by tenant id AND
-   * apiKey: static named tenants have a stable key (one cached client), while
-   * dynamically synthesized apis2 tenants (#5314) share an ownerId but carry a
-   * per-request scoped key -- keying on the key too avoids reusing a stale (e.g.
-   * revoked) client for a different key of the same owner.
-   */
-  private getApiClient(tenant: TenantConfig): ApiClient {
-    const cacheKey = `${tenant.id}:${tenant.apiKey}`;
-    let client = this.apiClients.get(cacheKey);
-    if (!client) {
-      client = new ApiClient(tenant);
-      this.apiClients.set(cacheKey, client);
-    }
-    return client;
   }
 
   /**
@@ -225,28 +301,44 @@ export class HttpGateway {
     const token = extractBearerToken(header);
 
     if (!token) {
-      writeJson(res, 401, {
-        error: 'unauthorized',
-        message: 'Missing or malformed Authorization: Bearer <token> header.',
-      });
+      writeJson(
+        res,
+        401,
+        {
+          error: 'unauthorized',
+          message: 'Missing or malformed Authorization: Bearer <token> header.',
+        },
+        this.oauthChallenge()
+      );
       return null;
     }
 
     const resolved = await this.authResolver.resolve(token);
     if (!resolved) {
-      writeJson(res, 403, {
-        error: 'forbidden',
-        message: 'The provided token is not valid for any tenant.',
-      });
+      const oauthEnabled = this.protectedResource?.enabled === true;
+      writeJson(
+        res,
+        oauthEnabled ? 401 : 403,
+        {
+          error: oauthEnabled ? 'invalid_token' : 'forbidden',
+          message: 'The provided token is not valid for any tenant.',
+        },
+        oauthEnabled ? this.oauthChallenge('read', 'invalid_token') : undefined
+      );
       return null;
     }
 
     // Per-key rate limit (AK5, #5194): enforced AFTER a valid key is resolved
     // and BEFORE any tool dispatch, so an over-limit key is stopped early. Keyed
-    // by tenant + hashed token so the cap is truly per key. Fails open on a
+    // by tenant + stable credential (OAuth token family, else hashed API key)
+    // so the cap is truly per credential and survives token rotation. Fails open on a
     // Redis outage (see RateLimiter) -- availability over perfect enforcement.
     if (this.rateLimiter) {
-      const identity = buildRateLimitIdentity(resolved.tenantId, token);
+      const identity = buildCredentialRateLimitIdentity(
+        resolved.tenantId,
+        token,
+        resolved.oauthFamilyId
+      );
       const decision = await this.rateLimiter.check(identity);
       if (!decision.allowed) {
         writeJson(
@@ -318,15 +410,21 @@ export class HttpGateway {
     if (!auth) return;
 
     const token = extractBearerToken(req.headers['authorization']) ?? '';
+    const proofCorrelationId = this.proofCorrelationId(req, res, auth);
+    if (proofCorrelationId === null) return;
     const tenant = this.resolveTenant(auth, res, token);
     if (!tenant) return;
 
-    const apiClient = this.getApiClient(tenant);
+    // Credentials can rotate on every OAuth delegation window. Keep no raw
+    // bearer or ephemeral ApiClient in a process-global cache.
+    const apiClient = new ApiClient(tenant);
     const server = createTenantMcpServer(tenant, apiClient, {
       scopes: auth.scopes,
       tier: auth.tier,
       piiExposureAllowed: auth.piiExposureAllowed,
-      auditSink: this.buildAuditSink(token),
+      agentSend: auth.agentSend,
+      auditSink: this.buildAuditSink(token, auth),
+      proofCorrelationId,
       maxToolCallsPerRun: this.maxToolCallsPerRun(),
     });
 
@@ -363,15 +461,19 @@ export class HttpGateway {
     if (!auth) return;
 
     const token = extractBearerToken(req.headers['authorization']) ?? '';
+    const proofCorrelationId = this.proofCorrelationId(req, res, auth);
+    if (proofCorrelationId === null) return;
     const tenant = this.resolveTenant(auth, res, token);
     if (!tenant) return;
 
-    const apiClient = this.getApiClient(tenant);
+    const apiClient = new ApiClient(tenant);
     const server = createTenantMcpServer(tenant, apiClient, {
       scopes: auth.scopes,
       tier: auth.tier,
       piiExposureAllowed: auth.piiExposureAllowed,
-      auditSink: this.buildAuditSink(token),
+      agentSend: auth.agentSend,
+      auditSink: this.buildAuditSink(token, auth),
+      proofCorrelationId,
       maxToolCallsPerRun: this.maxToolCallsPerRun(),
     });
 
@@ -387,6 +489,7 @@ export class HttpGateway {
       transport,
       close,
       authFingerprint: authFingerprint(auth),
+      credentialFingerprint: sessionCredentialFingerprint(auth, token),
     });
 
     res.on('close', () => {
@@ -411,6 +514,18 @@ export class HttpGateway {
       writeJson(res, 404, {
         error: 'not_found',
         message: 'Unknown or expired SSE session.',
+      });
+      return;
+    }
+
+    const token = extractBearerToken(req.headers['authorization']) ?? '';
+    if (
+      sessionCredentialFingerprint(auth, token) !==
+      session.credentialFingerprint
+    ) {
+      writeJson(res, 403, {
+        error: 'session_credential_mismatch',
+        message: 'This SSE session belongs to a different bearer credential.',
       });
       return;
     }
@@ -450,12 +565,73 @@ export class HttpGateway {
     req: IncomingMessage,
     res: ServerResponse
   ): Promise<void> {
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    const url = new URL(
+      req.url ?? '/',
+      `http://${req.headers.host ?? 'localhost'}`
+    );
     const path = url.pathname;
     const method = req.method ?? 'GET';
 
     if (path === '/health' && method === 'GET') {
       writeJson(res, 200, { status: 'ok' });
+      return;
+    }
+
+    if (path === MCP_SERVER_CARD_PATH && method === 'GET') {
+      writeJson(res, 200, MCP_SERVER_CARD, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'public, max-age=3600',
+      });
+      return;
+    }
+
+    if (path === '/.well-known/oauth-protected-resource' && method === 'GET') {
+      const metadata = this.protectedResource;
+      if (
+        !metadata?.enabled ||
+        !metadata.resource ||
+        !metadata.authorizationServer
+      ) {
+        writeJson(res, 404, { error: 'not_found' });
+        return;
+      }
+      writeJson(
+        res,
+        200,
+        {
+          resource: metadata.resource,
+          authorization_servers: [metadata.authorizationServer],
+          bearer_methods_supported: ['header'],
+          scopes_supported: ['read', 'draft', 'send'],
+        },
+        { 'Cache-Control': 'no-store' }
+      );
+      return;
+    }
+
+    if (
+      (path === AGENT_SKILLS_INDEX_PATH ||
+        path.startsWith('/.well-known/agent-skills/')) &&
+      (method === 'GET' || method === 'HEAD')
+    ) {
+      const asset = getAgentSkillAsset(path);
+      if (!asset) {
+        writeJson(res, 404, {
+          error: 'not_found',
+          message: `No route for ${method} ${path}.`,
+        });
+        return;
+      }
+      const headers = {
+        'Content-Type': asset.contentType,
+        'Content-Length': String(Buffer.byteLength(asset.content)),
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600',
+      };
+      res.writeHead(200, headers);
+      res.end(method === 'HEAD' ? undefined : asset.content);
       return;
     }
 
@@ -474,7 +650,10 @@ export class HttpGateway {
       return;
     }
 
-    writeJson(res, 404, { error: 'not_found', message: `No route for ${method} ${path}.` });
+    writeJson(res, 404, {
+      error: 'not_found',
+      message: `No route for ${method} ${path}.`,
+    });
   }
 
   async start(): Promise<void> {
@@ -549,7 +728,7 @@ export function synthesizeApis2Tenant(
     id: auth.tenantId,
     name: `apis2-owner-${auth.tenantId}`,
     apiUrl,
-    apiKey: token,
+    apiKey: auth.delegationToken ?? token, // pragma: allowlist secret -- runtime credential reference, not literal material
     scope: 'app',
   };
   if (auth.enabledTools && auth.enabledTools.length > 0) {

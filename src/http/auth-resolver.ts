@@ -60,6 +60,12 @@ export interface ResolvedAuth {
    * guard seam (see pii-guard.ts) refuses PII forwarding unless this is true.
    */
   piiExposureAllowed?: boolean;
+  /** API-audience token derived server-side from an MCP-audience OAuth token. */
+  delegationToken?: string;
+  /** Server-derived OAuth identities used for session and audit attribution. */
+  oauthClientId?: string;
+  oauthFamilyId?: string;
+  oauthCredentialId?: string;
 }
 
 /**

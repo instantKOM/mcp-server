@@ -43,6 +43,7 @@ const MCP_TOOLS = join(__dirname, '..', 'src', 'tools');
  */
 const IGNORED_PREFIXES = [
   'auth/',              // Authentication endpoints (login, refresh, etc.)
+  'a2a/',               // A2A protocol transport; it is not an MCP tool surface
   'app/',               // Frontend-specific endpoints (MCP uses v1/ equivalents)
   'webhooks/',          // Inbound webhook receivers
   'internal/metrics',   // Prometheus metrics
@@ -76,6 +77,12 @@ const IGNORED_ENDPOINTS = [
   // Root info endpoint
   'GET /',
   'GET ',
+  // RFC 9728 discovery metadata is consumed by OAuth clients, not an MCP tool.
+  'GET /.well-known/oauth-protected-resource',
+  'GET /.well-known/oauth-protected-resource/a2a/v1',
+  'GET /.well-known/oauth-authorization-server',
+  // A2A discovery is consumed by A2A clients, never proxied as an MCP tool.
+  'GET /.well-known/agent-card.json',
   // Channel hard-delete is intentionally Admin API only and must not be exposed via MCP.
   'DELETE /admin/channels/:param',
   // One-click unsubscribe is a mail-client callback with an opaque token, not an MCP tool.
@@ -83,6 +90,12 @@ const IGNORED_ENDPOINTS = [
   // Admin demo endpoints: browser-only canary page, media streaming makes no sense as MCP tool.
   'GET /admin/demo/message-types',
   'GET /admin/demo/media/:param',
+  // OAuth protocol endpoints are consumed by authorization clients, not exposed
+  // as agent tools. The protected-resource integration is tracked separately.
+  'GET /v1/oauth/authorize',
+  'POST /v1/oauth/authorize',
+  'POST /v1/oauth/token',
+  'POST /v1/oauth/revoke',
 ];
 
 /**

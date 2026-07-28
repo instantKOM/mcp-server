@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "campaign-from-brief",
+      "type": "skill-md",
+      "description": "Turn a short campaign brief into an audience segment and a ready-to-review broadcast draft on the target channel in one encapsulated server-side run.",
+      "url": "/.well-known/agent-skills/campaign-from-brief/SKILL.md",
+      "digest": "sha256:e1c3076c53aff99717b3680fb6f344abcac1178e833bc6032e2866244c772955"
+    },
+    {
+      "name": "lead-qualify",
+      "type": "skill-md",
+      "description": "Score a fresh inbound conversation against a qualification rubric, tag it, and prepare a routing recommendation and reply draft without sending anything.",
+      "url": "/.well-known/agent-skills/lead-qualify/SKILL.md",
+      "digest": "sha256:26aed60a00441f175d006bb11461befde0283fbae8e01c9374c2d1b10fe2babb"
+    },
+    {
+      "name": "reactivate-inactive",
+      "type": "skill-md",
+      "description": "Find contacts with no recent inbound activity and draft a personalized re-engagement broadcast to win them back.",
+      "url": "/.well-known/agent-skills/reactivate-inactive/SKILL.md",
+      "digest": "sha256:56a6d0901c2e20c4bfcf45d8da4de4ea850326f2ffb9556acc72724add25e4fa"
+    },
+    {
+      "name": "reengage-inactive",
+      "type": "skill-md",
+      "description": "Segment a channel's contacts and create a re-engagement broadcast draft for them in one encapsulated server-side run.",
+      "url": "/.well-known/agent-skills/reengage-inactive/SKILL.md",
+      "digest": "sha256:e333c6527ca9f91f9e67d4e3121da30b6282aa88f7e4f15e22ddf3a77bfedd27"
+    },
+    {
+      "name": "weekly-report",
+      "type": "skill-md",
+      "description": "Pull the week's messaging, broadcast and contact analytics and turn them into a concise narrative report with trends, anomalies and next actions.",
+      "url": "/.well-known/agent-skills/weekly-report/SKILL.md",
+      "digest": "sha256:9c04de0d23feb8d98c48b854ecf05b00815bcf0ed0b1a6c4df3fc033f43412f4"
+    }
+  ]
+}

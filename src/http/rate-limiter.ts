@@ -145,6 +145,26 @@ export function buildRateLimitIdentity(tenantId: string, token: string): string 
 }
 
 /**
+ * Build the per-CREDENTIAL rate-limit identity.
+ *
+ * An OAuth access token is short-lived and rotates on every refresh, so hashing
+ * the raw bearer would hand the agent a fresh budget after each rotation and
+ * make the cap trivially evadable. Bind the bucket to the stable OAuth token
+ * family instead; API keys keep the token-hash identity because the key itself
+ * is the long-lived credential. The `oauth-family:` marker keeps the two
+ * namespaces disjoint so a family id can never collide with a token hash.
+ */
+export function buildCredentialRateLimitIdentity(
+  tenantId: string,
+  token: string,
+  oauthFamilyId?: string
+): string {
+  return oauthFamilyId
+    ? buildRateLimitIdentity(tenantId, `oauth-family:${oauthFamilyId}`)
+    : buildRateLimitIdentity(tenantId, token);
+}
+
+/**
  * Fixed-window per-key rate limiter. Construct once, call `check(identity)` per
  * request. Fails open (allows + warns) on any store error.
  */

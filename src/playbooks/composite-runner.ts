@@ -35,10 +35,15 @@ import { stringifyUnknown } from '../types/stringify-unknown.js';
 import {
   isToolAllowedForScopes,
   resolveToolScope,
-  grantedScopeLevel,
   maxToolScope,
 } from '../tools/tool-scopes.js';
-import { resolveIdempotencyKey, withIdempotencyKey } from '../http/idempotency.js';
+import {
+  deriveIdempotencyKey,
+  deriveRestAuditCorrelationId,
+  resolveIdempotencyKey,
+  withIdempotencyKey,
+  withRestAuditCorrelation,
+} from '../http/idempotency.js';
 import { maskPiiValue } from '../http/pii-mask.js';
 import {
   type AuditSink,
@@ -86,6 +91,8 @@ export interface CompositeRunnerDeps {
    * data handed back to the LLM is masked.
    */
   piiExposureAllowed?: boolean;
+  /** Independent MSG_AGENT_SEND confirmation grant. */
+  agentSend?: boolean;
 }
 
 /** Outcome of a single executed step, surfaced in the structured result. */
@@ -114,6 +121,7 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
   private readonly maxToolCalls: number;
   private readonly auditSink: AuditSink;
   private readonly piiExposureAllowed: boolean;
+  private readonly agentSend: boolean | undefined;
 
   constructor(deps: CompositeRunnerDeps) {
     this.apiClient = deps.apiClient;
@@ -124,6 +132,7 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
       deps.maxToolCalls && deps.maxToolCalls > 0 ? deps.maxToolCalls : DEFAULT_MAX_TOOL_CALLS;
     this.auditSink = deps.auditSink ?? new NoopAuditSink();
     this.piiExposureAllowed = deps.piiExposureAllowed === true;
+    this.agentSend = deps.agentSend;
   }
 
   /**
@@ -237,11 +246,12 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
         return failedRunResult(playbook, this.surfaceOutcomes(outcomes), step, message);
       }
 
+      const restCorrelationId = this.restCorrelationId(step, resolvedArgs);
       try {
-        const raw = await this.runStep(step, resolvedArgs);
+        const raw = await this.runStep(step, resolvedArgs, restCorrelationId);
         stepOutputs[step.id] = parseStepOutput(raw);
         outcomes.push({ id: step.id, tool: step.tool, status: 'ok', args: resolvedArgs });
-        this.auditStep(step, 'success', resolvedArgs);
+        this.auditStep(step, 'success', resolvedArgs, undefined, restCorrelationId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         outcomes.push({
@@ -255,7 +265,8 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
           step,
           'error',
           resolvedArgs,
-          err instanceof Error ? err.name : 'Error'
+          err instanceof Error ? err.name : 'Error',
+          restCorrelationId
         );
         if (mutatingRun) {
           this.auditRun(playbook, runScope as 'draft' | 'send', 'error', {
@@ -283,19 +294,20 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
     step: PlaybookStep,
     outcome: 'success' | 'error',
     args: Record<string, unknown>,
-    errorCode?: string
+    errorCode?: string,
+    restCorrelationId?: string
   ): void {
     const scope = resolveToolScope({ name: step.tool });
     if (scope !== 'draft' && scope !== 'send') {
       return;
     }
-    emitAudit(this.auditSink, {
+    void emitAudit(this.auditSink, {
       action: 'composite_step',
       toolName: step.tool,
       scope,
       outcome,
       errorCode,
-      detail: summarizeArgs(args),
+      detail: compositeAuditDetail(summarizeArgs(args), restCorrelationId),
     });
   }
 
@@ -306,27 +318,62 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
     outcome: 'success' | 'error' | 'budget_exceeded' | 'scope_denied',
     extra?: { errorCode?: string; detail?: string }
   ): void {
-    emitAudit(this.auditSink, {
+    void emitAudit(this.auditSink, {
       action: 'composite_run',
       toolName: playbook.meta.id,
       scope: runScope,
       outcome,
       errorCode: extra?.errorCode,
-      detail: extra?.detail,
+      detail: compositeAuditDetail(extra?.detail),
     });
   }
 
   /** Execute one step, wrapping mutating (`send`) calls with an Idempotency-Key. */
-  private async runStep(step: PlaybookStep, args: Record<string, unknown>): Promise<unknown> {
-    if (resolveToolScope({ name: step.tool }) === 'send') {
+  private async runStep(
+    step: PlaybookStep,
+    args: Record<string, unknown>,
+    restCorrelationId: string | undefined
+  ): Promise<unknown> {
+    const scope = resolveToolScope({ name: step.tool });
+    if (scope === 'send') {
       const { key, cleanedArgs } = resolveIdempotencyKey({
         tenantId: this.tenantId,
         toolName: step.tool,
         args,
       });
-      return this.executeTool(step.tool, withIdempotencyKey(this.apiClient, key), cleanedArgs);
+      return this.executeTool(
+        step.tool,
+        withIdempotencyKey(this.apiClient, key, restCorrelationId),
+        cleanedArgs
+      );
+    }
+    if (scope === 'draft' && restCorrelationId) {
+      return this.executeTool(
+        step.tool,
+        withRestAuditCorrelation(this.apiClient, restCorrelationId),
+        args
+      );
     }
     return this.executeTool(step.tool, this.apiClient, args);
+  }
+
+  private restCorrelationId(
+    step: PlaybookStep,
+    args: Record<string, unknown>
+  ): string | undefined {
+    const scope = resolveToolScope({ name: step.tool });
+    if (scope !== 'draft' && scope !== 'send') {
+      return undefined;
+    }
+    const key =
+      scope === 'send'
+        ? resolveIdempotencyKey({
+            tenantId: this.tenantId,
+            toolName: step.tool,
+            args,
+          }).key
+        : deriveIdempotencyKey(this.tenantId, step.tool, args);
+    return deriveRestAuditCorrelationId(key);
   }
 
   /**
@@ -336,10 +383,17 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
   private findScopeViolation(
     steps: PlaybookStep[]
   ): { stepId: string; tool: string; requiredScope: string } | undefined {
-    if (grantedScopeLevel(this.scopes) === null) {
-      return undefined;
-    }
     for (const step of steps) {
+      if (
+        this.agentSend === false &&
+        resolveToolScope({ name: step.tool }) === 'send'
+      ) {
+        return {
+          stepId: step.id,
+          tool: step.tool,
+          requiredScope: 'MSG_AGENT_SEND',
+        };
+      }
       if (!isToolAllowedForScopes({ name: step.tool }, this.scopes)) {
         return {
           stepId: step.id,
@@ -373,6 +427,21 @@ export class PlaybookCompositeExecutor implements CompositePlaybookExecutor {
     }
     return merged;
   }
+}
+
+function compositeAuditDetail(
+  detail: string | undefined,
+  restCorrelationId?: string
+): string {
+  return [
+    'origin=remote_mcp',
+    ...(restCorrelationId
+      ? [`restCorrelationId=${restCorrelationId}`]
+      : []),
+    ...(detail ? [detail] : []),
+  ]
+    .join(';')
+    .slice(0, 512);
 }
 
 /**

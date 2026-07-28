@@ -20,12 +20,23 @@ import type { ApiClient } from '@instantkom/api-client';
 import type { TenantConfig } from '../types/index.js';
 import { getToolsForTenant } from '../tools/tool-selection.js';
 import { executeTool } from '../tools/tool-router.js';
-import { resolveToolScope, filterReadXorSend, assertReadXorSend } from '../tools/tool-scopes.js';
-import { resolveIdempotencyKey, withIdempotencyKey } from './idempotency.js';
+import {
+  resolveToolScope,
+  filterReadXorSend,
+  assertReadXorSend,
+} from '../tools/tool-scopes.js';
+import {
+  deriveIdempotencyKey,
+  deriveRestAuditCorrelationId,
+  resolveIdempotencyKey,
+  withIdempotencyKey,
+  withRestAuditCorrelation,
+} from './idempotency.js';
 import { maskPiiInToolResult } from './pii-mask.js';
 import { captureMcpException } from '../monitoring/sentry.js';
 import {
   playbookRegistry as defaultPlaybookRegistry,
+  effectiveRequiredScope,
   type PlaybookRegistry,
 } from '../playbooks/registry.js';
 import {
@@ -46,8 +57,14 @@ import {
   type AuditSink,
   NoopAuditSink,
   emitAudit,
+  emitProofAudit,
+  ProofAuditPersistenceError,
   summarizeArgs,
 } from './audit-log.js';
+import {
+  MCP_SERVER_CAPABILITIES,
+  MCP_SERVER_INFO,
+} from '../discovery/server-card.js';
 
 export interface TenantMcpServerOptions {
   /**
@@ -96,6 +113,24 @@ export interface TenantMcpServerOptions {
    * reaches the external LLM. Omit for full access (stdio / trusted contexts).
    */
   piiExposureAllowed?: boolean;
+  /** Independent MSG_AGENT_SEND confirmation grant; false strips send actions. */
+  agentSend?: boolean;
+  /**
+   * Validated proof UUID from the HTTP gateway header. A mutating tool must
+   * repeat the same UUID in its reserved argument before it is audit-bound.
+   */
+  proofCorrelationId?: string;
+}
+
+const PROOF_CORRELATION_ARGUMENT = '__instantkomProofCorrelationId';
+const PROOF_CORRELATION_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function proofError(message: string) {
+  return {
+    content: [{ type: 'text' as const, text: `Error: ${message}` }],
+    isError: true,
+  };
 }
 
 export function createTenantMcpServer(
@@ -119,20 +154,12 @@ export function createTenantMcpServer(
       // #5317: same default-deny PII gate as the base-tool path -- without the
       // AGENT_PII_EXPOSURE grant, the composite run's surfaced result is masked.
       piiExposureAllowed: options.piiExposureAllowed,
+      agentSend: options.agentSend,
     });
 
-  const server = new Server(
-    {
-      name: 'instantkom-mcp-server',
-      version: '1.0.0',
-    },
-    {
-      capabilities: {
-        tools: {},
-        prompts: {},
-      },
-    }
-  );
+  const server = new Server(MCP_SERVER_INFO, {
+    capabilities: MCP_SERVER_CAPABILITIES,
+  });
 
   const baseTools = getToolsForTenant(tenant, {
     includeMeta: false,
@@ -142,15 +169,24 @@ export function createTenantMcpServer(
   // Composite-delivery playbooks (#5196) surface as callable tools alongside the
   // regular tools, scope + tier gated. Their execution is the #5197 seam. Read
   // the registry live so on-disk playbook changes flow through with no deploy.
-  const compositeTools = listCompositePlaybooks(registry, options.scopes, options.tier).map(
-    playbookToToolDefinition
-  );
+  const compositeTools = listCompositePlaybooks(
+    registry,
+    options.scopes,
+    options.tier
+  ).map(playbookToToolDefinition);
   // READ XOR SEND (#5202): the primary scope filter (getToolsForTenant /
   // listCompositePlaybooks) already excludes mutating tools for a read-only key.
   // `filterReadXorSend` is a redundant final hard-strip so a regression in the
   // primary filter can never leak a mutation surface into a read-only session;
   // `assertReadXorSend` then proves the post-condition (fail-closed if violated).
-  const tools = filterReadXorSend([...baseTools, ...compositeTools], options.scopes);
+  const scopedTools = filterReadXorSend(
+    [...baseTools, ...compositeTools],
+    options.scopes
+  );
+  const tools =
+    options.agentSend === false
+      ? scopedTools.filter((tool) => resolveToolScope(tool) !== 'send')
+      : scopedTools;
   assertReadXorSend(options.scopes, tools);
 
   // Authoritative allow-set for THIS request: exactly the tools the resolved
@@ -170,9 +206,16 @@ export function createTenantMcpServer(
   // prompts/list: prompt-delivery playbooks the key's scope + tier allow. Read
   // live from the registry so added/removed playbooks flow through with no deploy.
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    const prompts = listPromptPlaybooks(registry, options.scopes, options.tier).map(
-      playbookToPromptDefinition
+    const allowedPlaybooks = listPromptPlaybooks(
+      registry,
+      options.scopes,
+      options.tier
+    ).filter(
+      (playbook) =>
+        options.agentSend !== false ||
+        effectiveRequiredScope(playbook.meta) !== 'send'
     );
+    const prompts = allowedPlaybooks.map(playbookToPromptDefinition);
     return { prompts };
   });
 
@@ -181,8 +224,17 @@ export function createTenantMcpServer(
   // indistinguishable on purpose so gating never leaks a hidden playbook).
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const playbook = getServablePrompt(registry, name, options.scopes, options.tier);
-    if (!playbook) {
+    const playbook = getServablePrompt(
+      registry,
+      name,
+      options.scopes,
+      options.tier
+    );
+    if (
+      !playbook ||
+      (options.agentSend === false &&
+        effectiveRequiredScope(playbook.meta) === 'send')
+    ) {
       throw new McpError(
         ErrorCode.InvalidParams,
         `Unknown or forbidden prompt '${name}'.`
@@ -190,7 +242,10 @@ export function createTenantMcpServer(
     }
     return {
       description: describePlaybook(playbook),
-      messages: renderPromptMessages(playbook, args as Record<string, unknown> | undefined),
+      messages: renderPromptMessages(
+        playbook,
+        args as Record<string, unknown> | undefined
+      ),
       _meta: { ...playbookServedMeta(playbook) } as Record<string, unknown>,
     };
   });
@@ -215,6 +270,36 @@ export function createTenantMcpServer(
       };
     }
 
+    const tool = toolByName.get(name);
+    const scope = tool ? resolveToolScope(tool) : 'read';
+    const rawCallArgs = (args || {}) as Record<string, unknown>;
+    const argumentCorrelation = rawCallArgs[PROOF_CORRELATION_ARGUMENT];
+    const headerCorrelation = options.proofCorrelationId;
+    const proofRequested =
+      argumentCorrelation !== undefined || headerCorrelation !== undefined;
+    const mutating = scope === 'draft' || scope === 'send';
+    if (proofRequested) {
+      if (!mutating || isCompositePlaybookTool(name)) {
+        return proofError(
+          'proof correlation is available only for base mutating tools'
+        );
+      }
+      if (
+        typeof argumentCorrelation !== 'string' ||
+        !PROOF_CORRELATION_PATTERN.test(argumentCorrelation) ||
+        typeof headerCorrelation !== 'string' ||
+        !PROOF_CORRELATION_PATTERN.test(headerCorrelation) ||
+        argumentCorrelation !== headerCorrelation
+      ) {
+        return proofError(
+          'proof correlation requires the same UUID v4 in the gateway header and reserved tool argument'
+        );
+      }
+    }
+    const callArgs = { ...rawCallArgs };
+    delete callArgs[PROOF_CORRELATION_ARGUMENT];
+    let restCorrelationId: string | undefined;
+
     try {
       // Composite playbook tool -> route to the #5197 executor seam. It is
       // already in the allow-set (scope + tier gated at build time), so no extra
@@ -222,9 +307,11 @@ export function createTenantMcpServer(
       if (isCompositePlaybookTool(name)) {
         const playbook = registry.get(toolNameToPlaybookId(name));
         if (!playbook) {
-          throw new Error(`Composite playbook '${name}' is no longer available.`);
+          throw new Error(
+            `Composite playbook '${name}' is no longer available.`
+          );
         }
-        return await compositeExecutor.execute(playbook, (args || {}) as Record<string, unknown>);
+        return await compositeExecutor.execute(playbook, callArgs);
       }
 
       // MUTATING (`send`) tools carry an Idempotency-Key so a duplicate call
@@ -232,13 +319,14 @@ export function createTenantMcpServer(
       // idempotency interceptor caches + replays the first response). read/draft
       // tools are left untouched. Explicit caller key (tool arg or MCP _meta)
       // wins; otherwise a deterministic key derived from tenant+tool+args.
-      const tool = toolByName.get(name);
-      const callArgs = (args || {}) as Record<string, unknown>;
       // #5204: a draft/send call is a MUTATING agent action -> audited (with its
       // outcome) after execution. read tools are never audited.
-      const scope = tool ? resolveToolScope(tool) : 'read';
-      const mutating = scope === 'draft' || scope === 'send';
-
+      if (scope === 'send' && options.agentSend === false) {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `Tool '${name}' requires the independent MSG_AGENT_SEND grant.`
+        );
+      }
       let result: Awaited<ReturnType<typeof executeTool>>;
       if (tool && scope === 'send') {
         const { key, cleanedArgs } = resolveIdempotencyKey({
@@ -247,10 +335,23 @@ export function createTenantMcpServer(
           args: callArgs,
           meta: (request.params as { _meta?: Record<string, unknown> })._meta,
         });
+        restCorrelationId =
+          headerCorrelation ?? deriveRestAuditCorrelationId(key);
         result = await executeTool(
           name,
-          withIdempotencyKey(apiClient, key),
-          cleanedArgs,
+          withIdempotencyKey(apiClient, key, restCorrelationId),
+          cleanedArgs
+        );
+      } else if (tool && scope === 'draft') {
+        restCorrelationId =
+          headerCorrelation ??
+          deriveRestAuditCorrelationId(
+            deriveIdempotencyKey(tenant.id, name, callArgs)
+          );
+        result = await executeTool(
+          name,
+          withRestAuditCorrelation(apiClient, restCorrelationId),
+          callArgs
         );
       } else {
         result = await executeTool(name, apiClient, callArgs);
@@ -270,40 +371,73 @@ export function createTenantMcpServer(
           typeof result === 'object' &&
           (result as { isError?: unknown }).isError
         );
-        emitAudit(auditSink, {
+        const auditEvent = {
           action: 'tool',
           toolName: name,
           scope: scope as 'draft' | 'send',
           outcome: isErr ? 'error' : 'success',
           errorCode: isErr ? 'ToolError' : undefined,
-          detail: summarizeArgs(callArgs),
-        });
+          detail: summarizeMcpAuditDetail(callArgs, restCorrelationId),
+          ...(headerCorrelation
+            ? { proofCorrelationId: headerCorrelation }
+            : {}),
+        } as const;
+        if (headerCorrelation) {
+          // Proof calls need a deterministic read-after-write boundary.
+          await emitProofAudit(auditSink, auditEvent);
+        } else {
+          void emitAudit(auditSink, auditEvent);
+        }
       }
 
       return result;
     } catch (error) {
+      if (error instanceof ProofAuditPersistenceError) {
+        captureMcpException(error, { tool: name, tenant: tenant.id });
+        return proofError(
+          'tool execution completed but proof audit persistence failed'
+        );
+      }
+      captureMcpException(error, { tool: name, tenant: tenant.id });
       // #5204: a thrown mutating call is still an audited (error) agent action.
       // Composite tools are excluded here -- their audit is the runner's job.
-      const tool = toolByName.get(name);
-      const scope = tool ? resolveToolScope(tool) : 'read';
-      if (!isCompositePlaybookTool(name) && (scope === 'draft' || scope === 'send')) {
-        emitAudit(auditSink, {
+      if (
+        !isCompositePlaybookTool(name) &&
+        (scope === 'draft' || scope === 'send')
+      ) {
+        const auditEvent = {
           action: 'tool',
           toolName: name,
           scope: scope as 'draft' | 'send',
           outcome: 'error',
           errorCode: error instanceof Error ? error.name : 'Error',
-          detail: summarizeArgs((args || {}) as Record<string, unknown>),
-        });
+          detail: summarizeMcpAuditDetail(callArgs, restCorrelationId),
+          ...(headerCorrelation
+            ? { proofCorrelationId: headerCorrelation }
+            : {}),
+        } as const;
+        if (headerCorrelation) {
+          try {
+            await emitProofAudit(auditSink, auditEvent);
+          } catch (auditPersistenceError) {
+            captureMcpException(auditPersistenceError, {
+              tool: name,
+              tenant: tenant.id,
+              phase: 'proof_audit',
+            });
+            return proofError(
+              'tool execution failed and proof audit persistence failed'
+            );
+          }
+        } else {
+          void emitAudit(auditSink, auditEvent);
+        }
       }
-      captureMcpException(error, { tool: name, tenant: tenant.id });
       return {
         content: [
           {
             type: 'text',
-            text: `Error: ${
-              error instanceof Error ? error.message : 'Unknown error'
-            }`,
+            text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
           },
         ],
         isError: true,
@@ -312,4 +446,17 @@ export function createTenantMcpServer(
   });
 
   return server;
+}
+
+function summarizeMcpAuditDetail(
+  args: Record<string, unknown>,
+  restCorrelationId: string | undefined
+): string {
+  const argKeys = summarizeArgs(args);
+  const fields = [
+    'origin=remote_mcp',
+    ...(restCorrelationId ? [`restCorrelationId=${restCorrelationId}`] : []),
+    ...(argKeys ? [`argKeys=${argKeys}`] : []),
+  ];
+  return fields.join(';').slice(0, 512);
 }

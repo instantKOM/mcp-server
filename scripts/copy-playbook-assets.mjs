@@ -72,8 +72,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const srcRoot = join(MODULE_DIR, '..', 'src', 'playbooks');
   const destRoot = join(MODULE_DIR, '..', 'dist', 'playbooks');
   const copied = copyPlaybookAssets(srcRoot, destRoot);
+  const discoverySrcRoot = join(MODULE_DIR, '..', 'src', 'discovery', 'agent-skills');
+  const discoveryDestRoot = join(MODULE_DIR, '..', 'dist', 'discovery', 'agent-skills');
+  const discoveryCopied = copyPlaybookAssets(discoverySrcRoot, discoveryDestRoot);
   // eslint-disable-next-line no-console
   console.log(
-    `copy-playbook-assets: copied ${copied.length} asset(s) into dist/playbooks`,
+    `copy-playbook-assets: copied ${copied.length} playbook asset(s) and ` +
+      `${discoveryCopied.length} Agent Skill asset(s)`,
   );
 }

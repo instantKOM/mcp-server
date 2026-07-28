@@ -58,6 +58,10 @@ interface IntrospectResponse {
   tier?: unknown;
   agentSend?: unknown;
   piiExposureAllowed?: unknown;
+  delegationToken?: unknown;
+  oauthClientId?: unknown;
+  oauthFamilyId?: unknown;
+  oauthCredentialId?: unknown;
 }
 
 export class Apis2AuthResolver implements AuthResolver {
@@ -146,6 +150,21 @@ export class Apis2AuthResolver implements AuthResolver {
     if (tier) resolved.tier = tier;
     resolved.agentSend = agentSend;
     resolved.piiExposureAllowed = piiExposureAllowed;
+    if (
+      typeof body.delegationToken === 'string' &&
+      body.delegationToken.startsWith('ikm_oauth_at_')
+    ) {
+      resolved.delegationToken = body.delegationToken;
+    }
+    if (
+      typeof body.oauthClientId === 'string' &&
+      typeof body.oauthFamilyId === 'string' &&
+      typeof body.oauthCredentialId === 'string'
+    ) {
+      resolved.oauthClientId = body.oauthClientId;
+      resolved.oauthFamilyId = body.oauthFamilyId;
+      resolved.oauthCredentialId = body.oauthCredentialId;
+    }
     return resolved;
   }
 }

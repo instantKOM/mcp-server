@@ -31,6 +31,12 @@ import type { ApiClient } from '@instantkom/api-client';
 
 /** Header name the API idempotency interceptor reads (case-insensitive). */
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
+/** PII-safe correlation shared by the Remote-MCP tool and its REST hop. */
+export const MCP_AUDIT_CORRELATION_HEADER = 'X-InstantKOM-MCP-Correlation-Id';
+
+export function deriveRestAuditCorrelationId(key: string): string {
+  return createHash('sha256').update(key, 'utf8').digest('hex');
+}
 
 /**
  * Deterministic JSON serialization with recursively sorted object keys, so two
@@ -141,12 +147,43 @@ const MUTATING_METHODS: readonly MutatingMethod[] = [
 export function withIdempotencyKey(
   apiClient: ApiClient,
   key: string,
+  correlationId?: string
+): ApiClient {
+  return withRestAuditCorrelation(
+    apiClient,
+    correlationId ?? deriveRestAuditCorrelationId(key),
+    key,
+    correlationId === undefined
+  );
+}
+
+/**
+ * Mark Remote-MCP REST mutations with a PII-safe correlation. The marker is
+ * observability metadata only: credential attribution still comes exclusively
+ * from the API guard. Reads are deliberately untouched.
+ */
+export function withRestAuditCorrelation(
+  apiClient: ApiClient,
+  correlationId: string,
+  idempotencyKey?: string,
+  correlateEffectiveIdempotencyKey = false
 ): ApiClient {
   const inject = (options: unknown): { headers: Record<string, string> } => {
     const existing = (options ?? {}) as { headers?: Record<string, string> };
+    const headers = {
+      ...(idempotencyKey ? { [IDEMPOTENCY_HEADER]: idempotencyKey } : {}),
+      ...existing.headers,
+    };
+    const effectiveIdempotencyKey = headers[IDEMPOTENCY_HEADER];
     return {
       ...existing,
-      headers: { [IDEMPOTENCY_HEADER]: key, ...existing.headers },
+      headers: {
+        ...headers,
+        [MCP_AUDIT_CORRELATION_HEADER]:
+          correlateEffectiveIdempotencyKey && effectiveIdempotencyKey
+            ? deriveRestAuditCorrelationId(effectiveIdempotencyKey)
+            : correlationId,
+      },
     };
   };
 
