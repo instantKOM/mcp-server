@@ -90,6 +90,9 @@ const IGNORED_ENDPOINTS = [
   // Admin demo endpoints: browser-only canary page, media streaming makes no sense as MCP tool.
   'GET /admin/demo/message-types',
   'GET /admin/demo/media/:param',
+  // Session debug tooling: env-gated, browser-only, never an agent tool.
+  'GET /admin/demo/session-tools',
+  'POST /admin/demo/session-token',
   // OAuth protocol endpoints are consumed by authorization clients, not exposed
   // as agent tools. The protected-resource integration is tracked separately.
   'GET /v1/oauth/authorize',
