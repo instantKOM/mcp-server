@@ -1,6 +1,6 @@
 {
   "name": "@instantkom/mcp-server",
-  "version": "3.195.8",
+  "version": "3.195.9",
   "description": "Model Context Protocol Server for the instantKOM REST API. Lets Claude Code, Claude Desktop and other MCP-compatible AI assistants drive your instantKOM messengerzentrale.",
   "main": "dist/index.public.js",
   "types": "dist/index.public.d.ts",
@@ -82,7 +82,7 @@
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.105.0",
+    "@anthropic-ai/sdk": "^0.128.0",
     "@types/node": "^25.6.2",
     "@vitest/coverage-v8": "^4.1.5",
     "openai": "^6.37.0",
