@@ -99,6 +99,13 @@ const IGNORED_ENDPOINTS = [
   'POST /v1/oauth/authorize',
   'POST /v1/oauth/token',
   'POST /v1/oauth/revoke',
+  // Admin service tokens (#7437): credentials management is a human-only
+  // admin UI flow; minting or revoking tokens must never be an agent tool.
+  'GET /admin/service-tokens',
+  'POST /admin/service-tokens',
+  'GET /admin/service-tokens/self',
+  'DELETE /admin/service-tokens/:param',
+  'GET /admin/service-tokens/:param/events',
 ];
 
 /**
