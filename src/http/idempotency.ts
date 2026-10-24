@@ -1,33 +1,21 @@
 /**
- * MCP-side Idempotency-Key propagation (Agent-Connect EPIC 1, AK4, issue #5193).
+ * MCP-side Idempotency-Key propagation (issue #5193).
  *
- * Every MUTATING (`send`-scoped) tool call must carry an `Idempotency-Key` so a
- * duplicate call with the same effective key performs only ONE mutation. The
- * dedup itself lives entirely in the API (`common/idempotency` -- a global,
- * Redis-backed interceptor that caches the first response per key and replays it
- * for any later request with the same header). This module only decides the key
- * and forwards it as the `Idempotency-Key` HTTP header on the outbound API call.
- *
- * Key precedence:
- *   1. An EXPLICIT key supplied by the caller wins -- either MCP request metadata
- *      (`params._meta.idempotencyKey`) or a tool argument (`args.idempotencyKey`).
- *      Lets an agent retry a specific logical operation with a stable key of its
- *      own choosing. A consumed `args.idempotencyKey` is stripped before the
- *      handler runs so it never leaks into the request body.
- *   2. Otherwise a DETERMINISTIC key derived from
- *          `${tenantId}:${toolName}:sha256(stableStringify(args))`
- *      where `tenantId` is the resolved tenant/key id for THIS request. So an
- *      accidental duplicate call (same tenant, same tool, same args) dedups,
- *      while any intentionally distinct call (different args) yields a different
- *      key and mutates normally. `stableStringify` sorts object keys recursively
- *      so argument ordering does not change the hash.
- *
- * read/draft tools never reach this module -- only `send`-classified calls are
- * wrapped, so retrieval/compose tools are unaffected.
+ * The shared resolver preserves explicit retry keys and deterministic defaults
+ * for content-addressed operations. Repeatable admin ticket state commands get
+ * a fresh default identity per invocation. Deduplication remains in the API's
+ * Redis-backed interceptor; this module only forwards headers.
  */
 
 import { createHash } from 'node:crypto';
 import type { ApiClient } from '@instantkom/api-client';
+
+export {
+  deriveIdempotencyKey,
+  resolveIdempotencyKey,
+  stableStringify,
+} from '@instantkom/api-client/idempotency.cjs';
+export type { ResolvedIdempotency } from '@instantkom/api-client/idempotency.cjs';
 
 /** Header name the API idempotency interceptor reads (case-insensitive). */
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
@@ -36,93 +24,6 @@ export const MCP_AUDIT_CORRELATION_HEADER = 'X-InstantKOM-MCP-Correlation-Id';
 
 export function deriveRestAuditCorrelationId(key: string): string {
   return createHash('sha256').update(key, 'utf8').digest('hex');
-}
-
-/**
- * Deterministic JSON serialization with recursively sorted object keys, so two
- * argument objects that differ only in key order hash identically. Arrays keep
- * their order (order IS semantically meaningful for a list argument).
- */
-export function stableStringify(value: unknown): string {
-  return JSON.stringify(sortValue(value));
-}
-
-function sortValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortValue);
-  }
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(record).sort()) {
-      sorted[key] = sortValue(record[key]);
-    }
-    return sorted;
-  }
-  return value;
-}
-
-/**
- * Derive a stable idempotency key from the resolved tenant id, tool name and a
- * hash of the (normalized) tool arguments.
- */
-export function deriveIdempotencyKey(
-  tenantId: string,
-  toolName: string,
-  args: unknown,
-): string {
-  const hash = createHash('sha256')
-    .update(stableStringify(args ?? {}))
-    .digest('hex');
-  return `${tenantId}:${toolName}:${hash}`;
-}
-
-export interface ResolvedIdempotency {
-  /** The effective Idempotency-Key to forward on the API request. */
-  key: string;
-  /** Args with any consumed explicit-key field removed. */
-  cleanedArgs: Record<string, unknown>;
-  /** Whether the key came from the caller (true) or was derived (false). */
-  explicit: boolean;
-}
-
-/**
- * Resolve the effective Idempotency-Key for a `send` tool call, applying the
- * precedence (explicit caller key > derived key) and stripping a consumed
- * `args.idempotencyKey` so it never leaks into the API request body.
- */
-export function resolveIdempotencyKey(params: {
-  tenantId: string;
-  toolName: string;
-  args: Record<string, unknown> | undefined;
-  meta?: Record<string, unknown> | undefined;
-}): ResolvedIdempotency {
-  const args: Record<string, unknown> = { ...params.args };
-
-  const metaKey = readStringField(params.meta, 'idempotencyKey');
-  const argKey = readStringField(args, 'idempotencyKey');
-  if (argKey !== undefined) {
-    delete args.idempotencyKey;
-  }
-
-  const explicitKey = metaKey ?? argKey;
-  if (explicitKey !== undefined) {
-    return { key: explicitKey, cleanedArgs: args, explicit: true };
-  }
-
-  return {
-    key: deriveIdempotencyKey(params.tenantId, params.toolName, args),
-    cleanedArgs: args,
-    explicit: false,
-  };
-}
-
-function readStringField(
-  source: Record<string, unknown> | undefined,
-  field: string,
-): string | undefined {
-  const value = source?.[field];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 /** HTTP verbs the ApiClient exposes that the interceptor treats as mutating. */

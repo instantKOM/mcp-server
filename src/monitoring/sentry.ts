@@ -35,8 +35,86 @@ export async function initSentry(): Promise<void> {
       process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development',
     // stdio CLI: keep it lean -- no profiling/tracing, just error capture.
     tracesSampleRate: 0,
+    // The HTTP mode attaches the incoming request to events.
+    beforeSend: reduceSentryRequest,
+    beforeSendTransaction: reduceSentryRequest,
   });
   sentry = mod;
+}
+
+// Request headers that carry no credentials or message content.
+const REQUEST_HEADER_ALLOWLIST = new Set([
+  'host',
+  'user-agent',
+  'accept',
+  'content-type',
+  'content-length',
+]);
+
+/**
+ * Reduces the Sentry request interface to an allowlist (#7667).
+ *
+ * @sentry/node attaches the incoming body (httpIntegration maxRequestBodySize
+ * defaults to "medium": JSON-RPC tool arguments), the query string, cookies
+ * and every header (the MCP OAuth bearer token). The request is rebuilt
+ * instead: URL without query and fragment, method, body and query as a field
+ * count only (the rule of the PHP LogScrubber::requestMetadata()), headers
+ * outside the allowlist masked, cookies dropped.
+ */
+export function reduceSentryRequest<T>(payload: T): T {
+  if (!payload || typeof payload !== 'object') return payload;
+  const request = (payload as { request?: unknown }).request;
+  if (!request || typeof request !== 'object') return payload;
+
+  const source = request as Record<string, unknown>;
+  const reduced: Record<string, unknown> = {};
+  if (typeof source.url === 'string') reduced.url = stripUrlQuery(source.url);
+  if (typeof source.method === 'string') reduced.method = source.method;
+  if (isPresent(source.query_string)) {
+    reduced.query_string = countFields(source.query_string);
+  }
+  if (isPresent(source.data)) reduced.data = countFields(source.data);
+  if (source.headers && typeof source.headers === 'object') {
+    reduced.headers = Object.fromEntries(
+      Object.entries(source.headers).map(([name, value]) => [
+        name,
+        REQUEST_HEADER_ALLOWLIST.has(name.toLowerCase()) ? value : '[REDACTED]',
+      ]),
+    );
+  }
+
+  return { ...(payload as object), request: reduced } as T;
+}
+
+function isPresent(value: unknown): boolean {
+  return value !== undefined && value !== null;
+}
+
+function stripUrlQuery(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url.split(/[?#]/, 1)[0];
+  }
+}
+
+function countFields(value: unknown): { field_count: number } {
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') {
+        return { field_count: Object.keys(parsed).length };
+      }
+    } catch {
+      // Not JSON: count it as form or query fields below.
+    }
+    return { field_count: [...new URLSearchParams(value).keys()].length };
+  }
+  if (value && typeof value === 'object') {
+    return { field_count: Object.keys(value).length };
+  }
+  return { field_count: 1 };
 }
 
 /** Capture an exception with MCP context. No-op when Sentry is not enabled. */

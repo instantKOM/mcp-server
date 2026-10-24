@@ -28,7 +28,7 @@ COPY tsconfig.base.json ./tsconfig.base.json
 # (dist/index.js) is missing and the mcp-server build fails to resolve it.
 # Surgical COPYs (not the whole dir) so a local node_modules/dist in the root
 # build context is never dragged in -- keeps the build hermetic + fast.
-COPY packages/api-client/package.json packages/api-client/package-lock.json packages/api-client/tsconfig.json ./packages/api-client/
+COPY packages/api-client/package.json packages/api-client/package-lock.json packages/api-client/tsconfig.json packages/api-client/idempotency.cjs packages/api-client/idempotency.d.cts ./packages/api-client/
 COPY packages/api-client/src ./packages/api-client/src
 WORKDIR /build/packages/api-client
 RUN npm ci --no-audit --no-fund && npm run build
