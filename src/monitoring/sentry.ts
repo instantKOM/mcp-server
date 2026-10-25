@@ -38,6 +38,9 @@ export async function initSentry(): Promise<void> {
     // The HTTP mode attaches the incoming request to events.
     beforeSend: reduceSentryRequest,
     beforeSendTransaction: reduceSentryRequest,
+    // Outgoing API calls record their query on breadcrumbs and spans.
+    beforeBreadcrumb: stripSentryUrlQueries,
+    beforeSendSpan: stripSentryUrlQueries,
   });
   sentry = mod;
 }
@@ -84,6 +87,57 @@ export function reduceSentryRequest<T>(payload: T): T {
   }
 
   return { ...(payload as object), request: reduced } as T;
+}
+
+// Breadcrumb and span data fields the SDK fills with the raw query or
+// fragment (@sentry/core integrations/http/add-outgoing-request-breadcrumb.js,
+// fetch.js, utils/url.js).
+const QUERY_DATA_KEYS = new Set(['http.query', 'http.fragment', 'url.query', 'url.fragment']);
+
+// Data fields that carry a whole URL or request target, query included.
+const URL_DATA_KEYS = new Set([
+  'url',
+  'http.url',
+  'url.full',
+  'http.target',
+  'from',
+  'to',
+  'lcp.url',
+  'browser.web_vital.lcp.url',
+]);
+
+// Span ops whose description is a URL; resource spans keep the query.
+const URL_DESCRIPTION_OPS = /^(?:http|resource)\./;
+
+/**
+ * Removes query and fragment from breadcrumbs and spans (#7703).
+ *
+ * The SDK cuts the query off the breadcrumb URL and the span name only to
+ * record it next to them as http.query / url.query, and keeps it inside
+ * http.url and http.target. A parameter denylist misses every name nobody
+ * listed, so the query leaves entirely.
+ */
+export function stripSentryUrlQueries<T>(item: T): T {
+  if (!item || typeof item !== 'object') return item;
+  const source = item as { data?: unknown; op?: unknown; description?: unknown };
+  const stripped: Record<string, unknown> = { ...(item as object) };
+
+  if (source.data && typeof source.data === 'object') {
+    stripped.data = Object.fromEntries(
+      Object.entries(source.data)
+        .filter(([key]) => !QUERY_DATA_KEYS.has(key))
+        .map(([key, value]) => [key, URL_DATA_KEYS.has(key) ? stripQuery(value) : value]),
+    );
+  }
+  if (typeof source.op === 'string' && URL_DESCRIPTION_OPS.test(source.op)) {
+    stripped.description = stripQuery(source.description);
+  }
+
+  return stripped as T;
+}
+
+function stripQuery(value: unknown): unknown {
+  return typeof value === 'string' && /[?#]/.test(value) ? stripUrlQuery(value) : value;
 }
 
 function isPresent(value: unknown): boolean {
