@@ -74,6 +74,9 @@ const IGNORED_PREFIXES = [
  * Use this for individual endpoints that intentionally don't need MCP tools.
  */
 const IGNORED_ENDPOINTS = [
+  // Private IP+monitoring-token exports for Ops Hub; never exposed as MCP tools.
+  'GET /internal/ops/insights',
+  'GET /internal/ops/users',
   // Root info endpoint
   'GET /',
   'GET ',
